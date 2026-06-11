@@ -1,0 +1,26 @@
+# Proprietary, copyright-protected materials. NEVER commit.
+Example models/
+Knowledge Base/
+reference/
+
+# Analyst's local data and models (personal work, outside the public repo)
+inputs/*.xlsx
+inputs/*.xlsm
+models/*.xlsx
+models/*.xlsm
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Office and OneDrive temp files
+~$*
+*.tmp
+
+# System
+Thumbs.db
+desktop.ini
+.DS_Store
