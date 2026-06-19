@@ -1,5 +1,15 @@
+# Core engine (model generation)
 openpyxl>=3.1
 pandas>=2.0
 numpy>=1.26
 PyYAML>=6.0
+
+# Verification harness (recalculates the generated workbook to check the formulas)
+formulas>=1.3
+
+# Tests
 pytest>=8.0
+
+# Interface note: the user interface is Claude Code itself (terminal / PowerShell).
+# There is no GUI and no Python->Claude bridge — Claude Code drives this engine as a
+# toolkit, so neither streamlit nor claude-agent-sdk is a dependency.

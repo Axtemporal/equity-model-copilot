@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "recalc: tests that require a recalc backend (formulas or LibreOffice)",
+]

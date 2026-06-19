@@ -3,11 +3,30 @@ Example models/
 Knowledge Base/
 reference/
 
+# Raw source material layer for the LLM wikis (releases, transcripts, research).
+# Copyright-protected; keep only the README + per-sector .gitkeep skeleton tracked.
+knowledge/sector_modeling_rules/sources/**
+!knowledge/sector_modeling_rules/sources/
+!knowledge/sector_modeling_rules/sources/**/
+!knowledge/sector_modeling_rules/sources/README.md
+!knowledge/sector_modeling_rules/sources/**/.gitkeep
+knowledge/damodaran_corporate_life_cycle/sources/**
+!knowledge/damodaran_corporate_life_cycle/sources/
+!knowledge/damodaran_corporate_life_cycle/sources/**/
+!knowledge/damodaran_corporate_life_cycle/sources/README.md
+!knowledge/damodaran_corporate_life_cycle/sources/**/.gitkeep
+
 # Analyst's local data and models (personal work, outside the public repo)
 inputs/*.xlsx
 inputs/*.xlsm
 models/*.xlsx
 models/*.xlsm
+models/*_session.yaml
+models/*.txt
+models/*.log
+
+# Removed Streamlit app — the interface is Claude Code (no GUI). Orphaned config.
+.streamlit/
 
 # Python
 __pycache__/

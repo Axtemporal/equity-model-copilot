@@ -1,0 +1,60 @@
+# Base template — universal blocks common to all sector models.
+# Sector templates extend this via `extends: base`.
+# The engine deep-merges schedules so a sector can enable/disable individual
+# schedules without rewriting the full premise list.
+id: base
+version: "1.0"
+
+# ─── Schedules ────────────────────────────────────────────────────────────────
+# Each schedule declares enabled: true/false and its premises list.
+# `fmt` values are string keys resolved in build_model.py (NUM_MN, NUM_1D, PCT).
+# `multiplier` is the Q→annual scaling applied when seeding annual projection years.
+
+schedules:
+  working_capital:
+    enabled: true
+    premises:
+      - {id: dso,      label: "Days sales outstanding (DSO)",              unit: "days", fmt: NUM_1D, multiplier: 1}
+      - {id: invdays,  label: "Inventory days",                            unit: "days", fmt: NUM_1D, multiplier: 1}
+      - {id: ocadays,  label: "Other current assets (days of revenue)",    unit: "days", fmt: NUM_1D, multiplier: 1}
+      - {id: dpo,      label: "Days payable outstanding (DPO)",            unit: "days", fmt: NUM_1D, multiplier: 1}
+      - {id: ocldays,  label: "Other current liabilities (days of rev.)",  unit: "days", fmt: NUM_1D, multiplier: 1}
+
+  debt:
+    enabled: true
+    premises:
+      - {id: debt_draw,     label: "Debt drawdowns (per period)",          unit: "mn",  fmt: NUM_MN, multiplier: 4}
+      - {id: debt_repay,    label: "Debt repayments (per period)",         unit: "mn",  fmt: NUM_MN, multiplier: 4}
+      - {id: debt_rate,     label: "Cost of debt (per period)",            unit: "%",   fmt: PCT,    multiplier: 4}
+      - {id: debt_curr_pct, label: "Debt classified as current (%)",       unit: "%",   fmt: PCT,    multiplier: 1}
+      - {id: other_finres,  label: "Other financial result (per period)",  unit: "mn",  fmt: NUM_MN, multiplier: 4}
+      - {id: min_cash,      label: "Minimum cash (revolver floor)",        unit: "mn",  fmt: NUM_MN, multiplier: 1}
+
+  leases:
+    enabled: true
+    premises:
+      - {id: lease_add,       label: "New leases / RoU additions (per period)",     unit: "mn", fmt: NUM_MN, multiplier: 4}
+      - {id: lease_depr_amt,  label: "Lease depreciation (per period)",             unit: "mn", fmt: NUM_MN, multiplier: 4}
+      - {id: lease_princ_amt, label: "Lease principal repayment (per period)",      unit: "mn", fmt: NUM_MN, multiplier: 4}
+      - {id: lease_rate,      label: "Lease discount rate (per period)",            unit: "%",  fmt: PCT,    multiplier: 4}
+      - {id: lease_curr_pct,  label: "Lease classified as current (%)",             unit: "%",  fmt: PCT,    multiplier: 1}
+
+  # ARO is sector-specific (O&G). Disabled by default; sector YAML opts in.
+  aro:
+    enabled: false
+    premises:
+      - {id: aro_accr,   label: "ARO accretion (discount unwind, per period)",          unit: "mn", fmt: NUM_MN, multiplier: 4}
+      - {id: aro_settle, label: "ARO settlements / decommissioning spend (per period)", unit: "mn", fmt: NUM_MN, multiplier: 4}
+
+  # Hedge/derivatives: optional. No premises defined here; sector YAML fills them in.
+  hedge:
+    enabled: false
+
+# ─── Common premises (universal across sectors) ───────────────────────────────
+# seed_strategy:
+#   fixed        → use seed_value as-is
+#   from_history → back-solve from the last historical period in the financial input
+common_premises:
+  - {id: days,   label: "Days in period",                unit: "days", fmt: NUM_1D, seed_strategy: fixed,        seed_value: 91.25, multiplier: 4}
+  - {id: tax,    label: "Effective tax rate (% of EBT)", unit: "%",    fmt: PCT,    seed_strategy: from_history,                     multiplier: 1}
+  - {id: payout, label: "Dividend payout (% of NI)",    unit: "%",    fmt: PCT,    seed_strategy: fixed,        seed_value: 0.0,   multiplier: 1}

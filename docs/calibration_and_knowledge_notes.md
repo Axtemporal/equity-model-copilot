@@ -97,6 +97,34 @@
 
 **Cash flow:** pure reconciliation — every line referenced from elsewhere in the model, nothing typed in. The balance sheet debugging routine (checking the cash impact line by line) becomes part of the generator's QA checklist.
 
+### Dynamic schedules: working capital, leases (IFRS-16), debt and revolver (distilled June 15, 2026)
+
+Replaces the engine's current static treatment (WC change hardcoded `=0`; debt, leases and financial result frozen flat). All four reference models (A–D) independently converge on the same working-capital and interest mechanics, which is what validates them as market standard.
+
+**Working capital — days-driven (all of Models A–D).**
+- Receivables = `DSO × Revenue / days_in_period`; Inventories = `inventory_days × cost_base / days_in_period`; Payables = `DPO × cost_base / days_in_period`.
+- `cost_base` = COGS (for commodity producers, the lifting/production cost; Model A uses COGS gross of D&A).
+- Each days premise is seeded by **inverting the reported historical balance** (`DSO_hist = AR/Revenue × days`), set once then drifted/held flat — every premise in its own cell.
+- **Critical mechanic (all models):** the cash-flow "change in working capital" line is computed from the period-over-period deltas of the balance-sheet WC lines, **not** from the schedule subtotal. This keeps the CF tied to the BS and makes the balance check self-enforcing (it fixes the tautological close).
+- Sector variation: telecom splits payables into suppliers / taxes payable / labour / other, each with its own days premise (B, C, D); O&G/mining uses the AR/Inv/AP triad (A). Quarterly base may be an LTM (trailing-4Q) sum (C).
+
+**Leases (IFRS-16) — full treatment only in Model C; D shows the reporting layout; A/B are partial (the gap to close).**
+- Twin roll-forwards linked by one additions driver: Right-of-use asset `EOP = BOP + additions − depreciation` (additions = % of revenue/capex); Lease liability `EOP = BOP + additions − principal repayment` (same additions figure).
+- Lease interest: **primary = `discount_rate × lease_liability_BOP`; fallback = `% of revenue`** when the rate is not disclosed/derivable (flag per company; the method used is recorded in the Assumptions log).
+- P&L: lease depreciation → D&A; lease interest → financial result (separate line). Report both **EBITDA** and **EBITDA-AL = EBITDA − lease depreciation − lease interest**. Split lease liability EOP into current/non-current by a % premise.
+- EV→equity bridge convention is decided at **v2 (the Valuation tab)**: the closed decision states both "leases count as debt in the bridge" and "FCFF deducts lease payments" — applying both double-counts, so one convention must be picked (the after-lease view — FCFF deducts payments, net debt ex-lease — is the coherent default). The three-statement roll-forward built now is identical either way.
+
+**Debt — all models use interest on the opening balance (no circularity); none builds a real tranche schedule.**
+- Roll-forward `Debt EOP = BOP + draws − repayments`, split ST/LT. Interest = `rate × debt_BOP` (strictly opening; if a non-zero issuance plug is active, reference BOP explicitly, not EOP, to stay non-circular).
+- MVP: a single indexer + spread per debt block (e.g. spread over CDI/Selic), **structured to accept per-tranche decomposition later** (backlog item 6: weighted-average Kd → WACC by formula). FX: separate BRL vs foreign-currency debt, revalue the foreign portion at period-end FX, isolate the non-cash FX revaluation so the CF adds it back (B). Seed the forward cost-of-debt premise from the historical implied rate (`interest / prior balance`). Optional: gate interest accrual on an activity flag (`IF production/revenue > 0`) for depleting resource assets (A).
+
+**Revolver / cash sweep — simple, non-circular (our improvement; no reference model demonstrates it — all let cash go negative).** Per spec "cash/revolver as plugs" and backlog item 2.
+- Minimum-cash premise. `cash_available = Cash_BOP + CFO + CFI + CFF(ex-revolver)`. Draw = `MAX(0, minimum − cash_available)`; Sweep = `MIN(revolver_BOP, MAX(0, cash_available − minimum))`. Revolver `EOP = BOP + draw − sweep`; revolver interest = `rate × revolver_BOP` (opening → no circularity). All via MIN/MAX, no nested IF.
+- Reading: the revolver balance is a **financing-need signal** — a growing revolver flags that the modeled plan does not self-fund. It is an estimate (assumes credit available at the modeled rate), logged with method, never reported data.
+
+**ARO / decommissioning — O&G-specific (built into the O&G engine; an optional schedule for other sectors).**
+- Roll-forward of the asset-retirement obligation: `ARO EOP = BOP + new ARO (capitalized into PP&E) + accretion − settlements`. Accretion = `discount_rate × ARO_BOP`, charged through the financial result (the unwinding of the discount). On initial recognition the ARO is capitalized into PP&E (asset side) and booked as a provision (liability side); it is settled in cash only at end of field life. Acquiring a field means assuming its ARO. The discount rate is a labeled premise.
+
 ### Data-gathering process (PIB guide, adapted to Brazil)
 
 A Brazilian Public Information Book per company: earnings release + IR results center, ITR/DFP and FRE filings with the CVM, call transcript, institutional presentation, guidance, news from the last 6 months, consensus when available. Becomes the checklist for the manual input phase and for the AI's searches.

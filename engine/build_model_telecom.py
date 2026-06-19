@@ -78,7 +78,7 @@ def main(input_path, out_path):
             pv = prev_period(tl, i)
             base = (f"='Input Operational'!{L(ohdr[last])}{orow[seed_lbl]}"
                     if pv["kind"] == "QH" else f"={L(pv['col'])}{row}")
-            return base[0] + f"({base[1:]})+{Praw(adds_key, p)}" if False else base + f"+{Praw(adds_key, p)}"
+            return base + f"+{Praw(adds_key, p)}"
         return f
 
     lines_f = stock_chain(row_lines, "Total lines", "adds", op)
@@ -182,7 +182,7 @@ def main(input_path, out_path):
     seed_fa = (f"='Input Financials'!{L(fhdr[last])}{frow['PP&E']}"
                f"+'Input Financials'!{L(fhdr[last])}{frow['Intangible assets and goodwill']}")
     r, SCH["fa"] = corkscrew(r, "FIXED + INTANGIBLE ASSETS", seed_fa,
-                             plus=lambda p, i: P("capex", p)[1:] and f"={Praw('capex', p)}",
+                             plus=lambda p, i: f"={Praw('capex', p)}",
                              minus=lambda p, i: f"=-{Praw('da', p)}")
     r, SCH["re"] = corkscrew(r, "RETAINED EARNINGS",
                              f"='Input Financials'!{L(fhdr[last])}{frow['Retained earnings (accumulated)']}",

@@ -16,8 +16,8 @@ A modeling copilot that turns the analyst's manual inputs into standardized Exce
 
 | Topic | Decision |
 |---|---|
-| Architecture | Hybrid. Python engine in the repo (sector templates, validations, .xlsx generator with real formulas). The AI layer runs via Claude. Web interface (Streamlit) on top of the same engine for the line-by-line workflow. |
-| MVP scope | Historicals + projections: integrated IFRS three-statement model and an operational tab connected to the financials. Valuation (DCF) is deferred to v2. |
+| Architecture | Hybrid. Python engine in the repo (sector templates, validations, .xlsx generator with real formulas). The AI layer runs via Claude. **The interface is Claude Code itself (terminal/PowerShell) driving the engine as a toolkit — no GUI** (decision of June 18, 2026; see §11). |
+| MVP scope | Historicals + projections: integrated IFRS three-statement model and an operational tab connected to the financials. The Valuation tab (DCF/WACC) is specified (see §4 and the third-round decisions) but not yet coded — backlog item 6. |
 | Pilot sectors | Oil & Gas (pilot company: Prio) and agricultural inputs (pilot company: 3tentos). |
 | Data entry | Manually keyed in by the user on the input tabs. Sector and regulatory data (e.g., ANP) are delivered ready-to-use by the user, not collected by the system. |
 | Granularity | Self-adapting structure: the operational tab builds itself around the data the company discloses (by field, asset, segment, or consolidated). This is the project's core differentiator. |
@@ -74,7 +74,7 @@ Original context of the concept:
 Two-phase implementation:
 
 - **Phase A (MVP):** the workflow runs in Cowork (chat) using the repo's Python engine. Same logic, no dedicated UI.
-- **Phase B (scenario under consideration, defined on June 10, 2026):** public GitHub repository. The user clones it into a local folder, connects Claude Code through PowerShell, adds the files to the inputs folder, and Claude opens a local web interface where each line and assumption is worked through, line by line, until the final Excel file is generated. Two candidate technical bridges between the UI and Claude: (a) a local app built on the Claude Agent SDK, using the user's own login/subscription, with no separate API cost; (b) a local MCP server that Claude Code connects to, with the UI served by it. To be decided after prototyping.
+- **Phase B (June 2026):** public GitHub repository. The user clones it into a local folder, drops files into the inputs folder, and opens **Claude Code in the repo** — this is the interface. Each line and assumption is worked through in conversation, with Claude Code driving the Python engine (build, log, harness) as a toolkit, until the final Excel file is generated. A Streamlit prototype on the Claude Agent SDK was built first and then discarded (June 18, 2026): the rerun model fought a stateful, latency-heavy approval workflow, and the SDK bridge (Python calling Claude) became redundant once Claude Code is the orchestrator. The engine also runs bare from PowerShell for scripted use.
 
 ---
 
@@ -128,4 +128,63 @@ Limitations that must remain visible in the product: estimation error propagates
 
 **Oil & Gas (pilot: Prio).** Production by field (boe/d), lifting cost, realization price vs. Brent, capex, reserves (1P/2P/3P), FX. ANP data comes in as a cross-check, delivered by the user. A good test of asset-level granularity.
 
-**Agricultural inputs (pilot: 3tentos).** Multi-segment structure (input retail, industrial, grains), volumes and margins by segment, crop seasonality, commodity prices, FX. Drivers exa
+**Agricultural inputs (pilot: 3tentos).** Multi-segment structure (input retail, industrial, grains), volumes and margins by segment, crop seasonality, commodity prices, FX. Exact drivers to be detailed when the template is built. A good test of incomplete disclosure and of a multi-segment company.
+
+Extensible later: mining (per mine/operation), retail, utilities, etc. Banks are out of scope for now (their statements depart from the industrial IFRS template).
+
+## 8. Alignment across models
+
+With more than one company in the library, shared macro and commodity assumptions (Brent, USDBRL, soybean, diesel) live in a central file referenced by the models, ensuring coverage consistency. Peer models in the same coverage serve as sanity checks for one another.
+
+---
+
+## 9. Compliance (non-negotiable, carried over from v0.1)
+
+- Every estimate marked as an estimate, with method and source, never as a reported number.
+- No investment recommendation under any circumstance.
+- Public sources only.
+- Visual labels separating reported data, the analyst's assumption, and an AI-assisted estimate.
+- Framing for professional use: CNPI, APIMEC, CVM Resolution 20.
+
+---
+
+## 10. Roadmap
+
+**MVP (Phase A):**
+1. Python engine: IFRS statement schema, O&G template, .xlsx generator with real formulas and a balance check.
+2. End-to-end Prio model: manual input → statements + operational → line-by-line assumption session → final Excel.
+3. 3tentos next, validating the engine's generalization to another sector and a multi-segment structure.
+
+Status (June 2026): the O&G engine builds the three interlinked statements with **dynamic schedules** — days-driven working capital, a debt schedule (interest on the opening balance), IFRS-16 leases (right-of-use + lease-liability roll-forwards), a simple non-circular revolver (keeps cash ≥ a minimum via MIN/MAX), and ARO/decommissioning — with the balance check at zero in every column, verified automatically by a recalculation harness (openpyxl writes formulas but does not compute them; the harness recalculates the workbook and asserts the invariants). Approved assumptions persist on rebuild (the Assumptions log is the source of truth). The interface is Claude Code driving the engine as a toolkit (the Streamlit prototype was removed on June 18, 2026); the line-by-line assumption session and four-agent panel are being redesigned for that format. Pending: the telecom engine is one step behind O&G (schedules still frozen); the declarative YAML template is written but not yet consumed by the engine; the full Valuation tab (DCF/WACC) is specified but not coded.
+
+**Evolution:**
+- Input-collector project (the user's separate repo): gathers public data and delivers the filled input workbook.
+- Full DCF with automatic sensitivity and value-driver ranking (the Valuation tab).
+- Scenarios (base/bull/bear).
+- Central shared-macro assumptions file.
+- Reference-Form reader connection (notes and the FRE feed estimates).
+- New sectors (mining a natural candidate for the per-mine granularity question).
+
+## 11. Closed decisions, second round (June 10, 2026)
+
+- **Projection horizon:** quarterly through the end of next year, annual through year 10.
+- **Pilot order:** Prio first, then 3tentos.
+- **Base/bull/bear scenarios:** v2.
+
+**Interface — decided (June 18, 2026):** the interface is **Claude Code itself** (terminal/PowerShell), driving the engine as a toolkit/CLI. The Streamlit + Agent SDK prototype was built and then discarded; this supersedes the earlier "Phase B bridge = Agent SDK" decision (neither Agent SDK nor MCP — the bridge is Claude Code). Consequence: deterministic guardrails (method+source gate, sanity bounds, harness, YAML log + cell comments) must be enforced by the engine as invariants, not left to the conversation. (LangChain/LangGraph were evaluated and discarded — keeping a plain Python engine driven by Claude Code.) Still open: the Python package name, and confirming each pilot's reporting currency on the first input.
+
+## 12. Stack and engineering
+
+- Python: pandas, numpy, openpyxl (real formulas, never static values where a formula belongs)
+- Declarative sector templates (YAML/JSON): lines, operational → financial mapping, granularity rules
+- Reasoning layer: Claude, via Claude Code driving the engine as a toolkit (the interface; no GUI, no Python→Claude SDK bridge)
+- Suggested repo structure: `/engine` (package), `/templates` (sectors), `/inputs` (per-company input sheets), `/models` (.xlsx outputs), `/knowledge` (per-line projection method cards distilled from the training library), `/reference` (market models and the training library, necessarily gitignored for copyright), README, requirements.txt, .gitignore, engine tests
+- Retry, cache and logging wherever there is an external source; everything versioned
+
+## 13. Sources and references
+
+- CVM (ITR, DFP, FRE, explanatory notes), B3, BCB
+- ANP (O&G operational data, delivered by the user); CONAB/USDA as candidates for agribusiness
+- Anthropic's `creating-financial-models` skill as an engineering reference for the calculation engine
+- Evidence of LLM arithmetic limitations in finance: arXiv, July 2025 (confirm the exact reference before any public citation)
+- Compliance: CNPI, APIMEC, CVM Resolution 20

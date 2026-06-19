@@ -33,7 +33,7 @@ The `/coverage` folder organizes sectors and companies (`/coverage/<sector>/<com
 | `inputs/` | Your data, per company (local, outside git) |
 | `models/` | Generated models (local, outside git) |
 | `coverage/` | Per-sector and per-company knowledge (profile, theses, logs) |
-| `knowledge/` | Per-line projection method cards (distilled from market practice) |
+| `knowledge/` | Per-line method cards, the Damodaran corporate-life-cycle framework, and per-sector modeling rules (distilled) |
 | `docs/` | Specification, calibration notes and figures |
 
 ## Quickstart
@@ -43,15 +43,23 @@ git clone https://github.com/<your-username>/equity-model-copilot.git
 cd equity-model-copilot
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
+python -m engine.check_env   # preflight: confirms imports + the recalc backend actually computes
 claude   # opens Claude Code; ask: "read CLAUDE.md and let's model company X"
 ```
 
-Quick engine test without real data:
+Quick engine test without real data (build + verify in one step):
 
 ```powershell
 python engine/build_input_template.py
 python engine/dev_fill_synthetic.py templates/input_template_oil_and_gas.xlsx inputs/SYNTH_inputs.xlsx
-python engine/build_model.py inputs/SYNTH_inputs.xlsx models/SYNTH_model.xlsx
+python -m engine.harness.pipeline inputs/SYNTH_inputs.xlsx models/SYNTH_model.xlsx   # validate -> build -> verify
+python -m pytest -q                                                                  # full test suite
+```
+
+Run the line-by-line assumption session by talking to Claude Code in the repo folder (this is the interface — there is no separate app):
+
+```powershell
+claude   # then: "read CLAUDE.md and let's run the assumption session for company X"
 ```
 
 ## Model conventions
@@ -60,7 +68,12 @@ Columns with quarters and the year closing each block (`1Q24, 2Q24, 3Q24, 4Q24, 
 
 ## Status and roadmap
 
-Engine v0 validated end-to-end in two sectors (O&G with synthetic data; telecom with real reported data and a guidance-based assumption session). Being built, in this order: declarative sector templates, revolver and dynamic debt, dynamic working capital, EV→equity bridge, assumption persistence on re-build, full Valuation tab, local web interface for the session (via MCP + Claude Code). Details in `docs/project_specification.md`.
+The Oil & Gas engine is complete with **dynamic schedules** — days-driven working capital, a debt schedule (interest on the opening balance), IFRS-16 leases (right-of-use + lease-liability roll-forwards), a simple non-circular revolver, and ARO — all verified by a **recalculation harness** that asserts the balance check is zero in every column (openpyxl writes formulas but does not compute them, so the harness recalculates and checks). Approved assumptions persist on rebuild. The **interface is Claude Code itself** (your own subscription, no API key): you run the line-by-line assumption session as a conversation, and Claude Code drives the engine as a toolkit.
+
+- **Done (Oil & Gas):** dynamic working capital, debt + revolver schedules, IFRS-16 leases, ARO, assumption persistence on rebuild, verification harness.
+- **Next:** declarative YAML templates consumed by the engine (sectors become data, not code), telecom parity (port the dynamic schedules), the operational-structure layer (auto-detect per-asset vs. consolidated disclosure), the full Valuation tab (DCF/WACC), scenarios.
+
+Details in `docs/project_specification.md`.
 
 ## Compliance
 
