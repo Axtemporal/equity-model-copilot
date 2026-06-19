@@ -1,0 +1,28 @@
+# Oil & Gas — per-sector financial + operational DELTA over the universal base.
+#
+# The single MACHINE-READABLE source for the sector's extra required input labels. The method
+# card (knowledge/sector_modeling_rules/sectors/oil_and_gas.md) links here; this YAML is never
+# duplicated in card prose. Labels must match what engine/build_model.py hard-reads exactly
+# (a mismatch is a build-time KeyError) — see tests/test_canonical_schema.py for the guard.
+#
+# Universal base (shared by every sector) lives in engine/canonical_schema.py, not here.
+required:
+  Input Financials:
+    - "(-) Cost of goods sold"
+    - "(=) Gross profit"
+    - "(-) General & administrative expenses"
+    - "(-) Exploration expenses"
+    - "(+/-) Other operating income (expenses)"
+    - "(+/-) Financial result"
+    - "memo: (+) Depreciation, depletion & amortization"
+    - "Provisions (incl. asset retirement obligation)"
+    - "Minority interest (equity)"
+  Input Operational:
+    - "PRODUCTION BY ASSET"
+    - "LIFTING COST BY ASSET"
+    - "CAPEX BY ASSET"
+    - "Asset 1 name"
+    - "Brent average"
+    - "Realized price"
+    - "Sales volume"
+    - "Royalties and government take"

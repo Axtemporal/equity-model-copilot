@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import openpyxl
 
+from ..canonical_schema import OIL_AND_GAS, TELECOM
 from . import verify_model
 from .report import Report
 from .validator import assert_valid_input, detect_sector
@@ -30,9 +31,9 @@ def build_and_verify(
     """
     assert_valid_input(input_path, sector)
     sector = sector or detect_sector(openpyxl.load_workbook(input_path))
-    if sector == "oil_gas":
+    if sector == OIL_AND_GAS:
         from engine import build_model as builder
-    elif sector == "telecom":
+    elif sector == TELECOM:
         from engine import build_model_telecom as builder
     else:
         raise ValueError(f"unknown sector: {sector!r}")
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("input", help="filled input .xlsx")
     parser.add_argument("output", help="path to write the model .xlsx")
-    parser.add_argument("--sector", default=None, choices=[None, "oil_gas", "telecom"])
+    parser.add_argument("--sector", default=None, choices=[None, OIL_AND_GAS, TELECOM])
     parser.add_argument("--backend", default="formulas")
     parser.add_argument("--no-verify", action="store_true")
     args = parser.parse_args()

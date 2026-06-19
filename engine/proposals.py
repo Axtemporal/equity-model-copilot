@@ -64,7 +64,7 @@ ASSUMPTION_PROPOSAL_TOOL = {
                 },
             },
         },
-        "required": ["line_item", "values", "method", "rationale"],
+        "required": ["line_item", "values", "method", "source", "rationale"],
     },
 }
 

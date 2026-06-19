@@ -11,62 +11,17 @@ import re
 
 import openpyxl
 
+from ..canonical_schema import OIL_AND_GAS, SECTORS, TELECOM, required_labels
 from .invariants import ERROR_VALUES, LABEL_COL, find_label_row, period_columns
 from .report import CellRef, InvariantResult, Report, Severity
 
 _QUARTER_RE = re.compile(r"^[1-4]Q\d{2}$")
 _YEAR_RE = re.compile(r"^\d{4}$")
 
-# Exact labels the engine looks up by string (a typo here is a build-time KeyError).
-REQUIRED_LABELS = {
-    "oil_gas": {
-        "Input Financials": [
-            "(=) Net revenue",
-            "(-) General & administrative expenses",
-            "(-) Exploration expenses",
-            "(+/-) Financial result",
-            "(=) EBT",
-            "(-) Income taxes",
-            "memo: (+) Depreciation, depletion & amortization",
-            "PP&E",
-            "Retained earnings (accumulated)",
-            "Cash and equivalents",
-        ],
-        "Input Operational": [
-            "PRODUCTION BY ASSET",
-            "LIFTING COST BY ASSET",
-            "CAPEX BY ASSET",
-            "Asset 1 name",
-            "Brent average",
-            "Realized price",
-            "Sales volume",
-            "Royalties and government take",
-        ],
-    },
-    "telecom": {
-        "Input Financials": [
-            "(=) Net revenue",
-            "(-) Depreciation & amortization",
-            "(+/-) Net financial result",
-            "(=) EBITDA (as disclosed)",
-            "(=) EBT",
-            "(-) Income taxes",
-            "PP&E",
-            "Intangible assets and goodwill",
-            "Retained earnings (accumulated)",
-            "Cash and equivalents",
-            "memo: Fixed service revenue",
-            "memo: Product revenue",
-        ],
-        "Input Operational": [
-            "Total lines",
-            "ARPU total",
-            "TIM Live clients",
-            "ARPU TIM Live",
-            "Capex",
-        ],
-    },
-}
+# Exact labels each sector's engine looks up by string (a typo here is a build-time KeyError).
+# Sourced from the canonical schema (universal base + per-sector delta) — the single source of
+# truth — so the validated set matches what the engine actually hard-reads, not a stale subset.
+REQUIRED_LABELS = {sector: required_labels(sector) for sector in SECTORS}
 
 
 class InputValidationError(Exception):
@@ -83,9 +38,9 @@ def detect_sector(wb) -> str | None:
         return None
     op = wb["Input Operational"]
     if find_label_row(op, "PRODUCTION BY ASSET") is not None:
-        return "oil_gas"
+        return OIL_AND_GAS
     if find_label_row(op, "Total lines") is not None:
-        return "telecom"
+        return TELECOM
     return None
 
 

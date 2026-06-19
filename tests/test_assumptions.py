@@ -5,10 +5,12 @@ import openpyxl
 import pytest
 
 from engine.assumptions import (
+    AssumptionProvenanceError,
     AssumptionsLog,
     AssumptionStatus,
     apply_to_model,
     parse_adjustment,
+    provenance_violations,
     read_premises,
 )
 from engine.harness import verify_model
@@ -42,6 +44,33 @@ def test_log_roundtrip(tmp_path):
     reloaded = AssumptionsLog.load(path)
     assert reloaded.get("Brent average").status == AssumptionStatus.APPROVED.value
     assert reloaded.approved_overrides()[("Brent average", "2029")] == 70
+
+
+def test_approve_without_provenance_is_blocked():
+    """The method+source gate as an engine invariant: cannot approve an unlabeled estimate."""
+    log = AssumptionsLog()
+    log.upsert("Brent average", {"2029": 70})  # no method/source/date
+    with pytest.raises(AssumptionProvenanceError):
+        log.approve("Brent average")
+    assert log.get("Brent average").status == AssumptionStatus.PROPOSED.value
+
+    # supplying full provenance lets it through
+    log.upsert("Brent average", {"2029": 70}, method="forward curve",
+               source="EIA STEO", source_date="2026-06")
+    log.approve("Brent average")
+    assert log.get("Brent average").status == AssumptionStatus.APPROVED.value
+    assert provenance_violations(log) == []
+
+
+def test_provenance_violations_flags_handedited_approved():
+    """Read-side audit: an APPROVED entry that slipped in without provenance is reported."""
+    from engine.assumptions import Assumption
+    log = AssumptionsLog(assumptions=[
+        Assumption(line_item="Realized price", values={"2029": 80},
+                   status=AssumptionStatus.APPROVED.value),
+    ])
+    violations = provenance_violations(log)
+    assert len(violations) == 1 and "Realized price" in violations[0]
 
 
 def _premises_cell(model_path, line_item, period):

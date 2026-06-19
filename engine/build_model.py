@@ -265,7 +265,7 @@ def prem(ws_name, rows, cols):
 
 
 # --------------------------------------------------------------------- valuation
-def add_valuation_tab(wb, tl, hist_q, rows_is, rows_bs, rows_sc, rows_cf):
+def add_valuation_tab(wb, tl, hist_q, rows_is, rows_bs, rows_sc, rows_cf, shares: float | None = None):
     """DCF (FCFF) valuation tab. Reads the projected statements and builds: WACC (with Kd
     linked to the debt schedule by formula), explicit-period PV, Gordon terminal value,
     EV→equity bridge (leases treated as debt, IFRS-16), implied value per share, multiples,
@@ -430,9 +430,17 @@ def add_valuation_tab(wb, tl, hist_q, rows_is, rows_bs, rows_sc, rows_cf):
     mi = r; lbl(r, "(−) Minority interest")
     fx(r, f"=-BS!{lhc}{rows_bs['Minority interest (equity)']}", NUM_MN, font=GREEN); r += 1
     eqv = r; lbl(r, "(=) Equity value", BOLD); fx(r, f"={D(ev)}+{D(nd)}+{D(lz)}+{D(mi)}", NUM_MN, font=BOLD); r += 1
-    sh = r; lbl(r, "Shares outstanding (mn)"); inp(r, 1000.0, NUM_MN)
-    lbl(r, "seed — set from the input / filing", SUB, col=FIRST_COL + 1); r += 1
+    sh = r; lbl(r, "Shares outstanding (mn)")
+    if shares and shares > 0:
+        inp(r, float(shares), NUM_MN)
+        lbl(r, "from input — memo: Shares outstanding (EOP), last actual", SUB, col=FIRST_COL + 1)
+    else:
+        inp(r, 1000.0, NUM_MN)
+        lbl(r, "seed — shares line absent/empty in input; set from the filing", SUB, col=FIRST_COL + 1)
+    r += 1
     tp = r; lbl(r, "(=) Implied value per share", BOLD); fx(r, f"=IFERROR({D(eqv)}/{D(sh)},0)", NUM_2D, font=BOLD); r += 1
+    lbl(r, "Analytical output — model-implied value, NOT a price target or investment "
+           "recommendation; an estimate (see method & sources).", SUB); r += 1
 
     # --- multiples ----------------------------------------------------------
     r += 1
@@ -1154,7 +1162,8 @@ def main(input_path, out_path, sector: str | None = None):
                    hist=lambda p: chk_f(p, 0), qp=chk_f, yb=chk_f, ys=chk_f)
 
     # ---------------------------------------------------------- Valuation (DCF)
-    add_valuation_tab(wb, tl, hist_q, rows_is, rows_bs, rows_sc, rows_cf)
+    add_valuation_tab(wb, tl, hist_q, rows_is, rows_bs, rows_sc, rows_cf,
+                      shares=gf("memo: Shares outstanding (EOP)", 0.0))
 
     # ---------------------------------------------------------- Cover
     cov = wb.create_sheet("Cover", 0)

@@ -1,0 +1,98 @@
+# Curated GLOBAL bilingual alias dictionary: canonical label -> known raw spellings (PT/EN).
+#
+# The deterministic muscle of Fase 1 matching (label_resolver pass 2). Cross-language and
+# report-variant spellings that the exact/normalized pass cannot catch live here. Entries are
+# normalized at load (engine.canonical_schema.normalize), so accents/case/sign-prefix don't
+# matter — list the natural spelling. AI-confirmed mappings are appended to a SEPARATE override
+# layer (not this file) by alias_dictionary.add(); promote to this curated layer only on review.
+aliases:
+  "(=) Net revenue":
+    - "Receita líquida"
+    - "Receita operacional líquida"
+    - "Receita líquida de vendas"
+    - "ROL"
+    - "Net operating revenue"
+    - "Net sales"
+    - "Total revenue"
+  "(=) EBIT":
+    - "Resultado operacional"
+    - "Lucro operacional"
+    - "Operating income"
+    - "Operating profit"
+  "(=) EBT":
+    - "Lucro antes do imposto"
+    - "Lucro antes dos tributos"
+    - "LAIR"
+    - "Earnings before taxes"
+    - "Pre-tax income"
+  "(-) Income taxes":
+    - "Imposto de renda e contribuição social"
+    - "IR e CSLL"
+    - "Impostos"
+    - "Income tax expense"
+    - "Taxes"
+  "(=) Net income":
+    - "Lucro líquido"
+    - "Lucro líquido do período"
+    - "Net profit"
+    - "Net earnings"
+    - "Profit for the period"
+  "(=) EBITDA (as disclosed)":
+    - "EBITDA"
+    - "EBITDA reportado"
+    - "EBITDA divulgado"
+    - "Reported EBITDA"
+  "Cash and equivalents":
+    - "Caixa e equivalentes de caixa"
+    - "Caixa e equivalentes"
+    - "Cash and cash equivalents"
+  "Short-term investments":
+    - "Aplicações financeiras"
+    - "Títulos e valores mobiliários"
+    - "Marketable securities"
+  "Trade receivables":
+    - "Contas a receber"
+    - "Clientes"
+    - "Accounts receivable"
+    - "Trade and other receivables"
+  "Inventories":
+    - "Estoques"
+    - "Inventory"
+  "Trade payables":
+    - "Fornecedores"
+    - "Contas a pagar"
+    - "Accounts payable"
+  "PP&E":
+    - "Imobilizado"
+    - "Property, plant and equipment"
+    - "Property plant and equipment"
+  "Intangible assets and goodwill":
+    - "Intangível"
+    - "Intangível e ágio"
+    - "Intangible assets"
+    - "Goodwill and intangibles"
+  "Loans and financing (current)":
+    - "Empréstimos e financiamentos (circulante)"
+    - "Empréstimos e financiamentos circulante"
+    - "Short-term debt"
+    - "Current borrowings"
+  "Loans and financing (non-current)":
+    - "Empréstimos e financiamentos (não circulante)"
+    - "Long-term debt"
+    - "Non-current borrowings"
+  "Retained earnings (accumulated)":
+    - "Lucros acumulados"
+    - "Reservas de lucros"
+    - "Accumulated earnings"
+  "Share capital and reserves":
+    - "Capital social e reservas"
+    - "Capital social"
+    - "Share capital"
+  "(-) Depreciation & amortization":
+    - "Depreciação e amortização"
+    - "D&A"
+    - "Depreciation and amortization"
+  "memo: (+) Depreciation, depletion & amortization":
+    - "Depreciação, exaustão e amortização"
+    - "DD&A"
+    - "Depreciation, depletion and amortization"

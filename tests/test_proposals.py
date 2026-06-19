@@ -20,8 +20,10 @@ def test_tool_schema_is_well_formed():
     schema = ASSUMPTION_PROPOSAL_TOOL
     assert schema["name"] == "propose_assumption"
     props = schema["input_schema"]["properties"]
-    assert {"line_item", "values", "method", "rationale"} <= set(props)
-    assert set(schema["input_schema"]["required"]) == {"line_item", "values", "method", "rationale"}
+    assert {"line_item", "values", "method", "source", "rationale"} <= set(props)
+    assert set(schema["input_schema"]["required"]) == {
+        "line_item", "values", "method", "source", "rationale"
+    }
 
 
 def test_toolcall_validates_and_converts():

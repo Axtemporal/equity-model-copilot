@@ -29,6 +29,22 @@ class AssumptionStatus(str, Enum):
     REJECTED = "Rejeitada"
 
 
+# Compliance fields every approved estimate must carry (method + source + date).
+PROVENANCE_FIELDS = ("method", "source", "source_date")
+
+
+class AssumptionProvenanceError(ValueError):
+    """Raised when approving a premise without method + source + date.
+
+    The method+source gate as an ENGINE INVARIANT (not a conversation convention): an estimate
+    cannot be approved into the model unlabeled. See CLAUDE.md compliance + flow §Fase 1.
+    """
+
+
+def _missing_provenance(entry) -> list[str]:
+    return [f for f in PROVENANCE_FIELDS if not str(getattr(entry, f, "") or "").strip()]
+
+
 @dataclass
 class Assumption:
     """One premise decision. `values` maps a period label (e.g. '2029') to its number."""
@@ -117,6 +133,12 @@ class AssumptionsLog:
         entry = self.get(line_item)
         if entry is None:
             raise KeyError(f"no assumption for line item {line_item!r}")
+        missing = _missing_provenance(entry)
+        if missing:
+            raise AssumptionProvenanceError(
+                f"cannot approve {line_item!r} without {', '.join(missing)} — compliance "
+                f"requires every estimate to carry method + source + date"
+            )
         entry.status = AssumptionStatus.APPROVED.value
         entry.decided_by = decided_by
         entry.decided_date = decided_date or datetime.date.today().isoformat()
@@ -140,6 +162,21 @@ class AssumptionsLog:
                 for period, value in entry.values.items():
                     out[(entry.line_item, str(period))] = value
         return out
+
+
+def provenance_violations(log: AssumptionsLog) -> list[str]:
+    """Approved assumptions missing method/source/date — the data for a harness FAIL invariant.
+
+    The approve() gate prevents these at write time; this is the read-side audit (e.g. for an
+    older log or a hand-edited YAML) so the harness can FAIL a model whose log slipped through.
+    """
+    out: list[str] = []
+    for entry in log.assumptions:
+        if entry.status == AssumptionStatus.APPROVED.value:
+            missing = _missing_provenance(entry)
+            if missing:
+                out.append(f"{entry.line_item}: missing {', '.join(missing)}")
+    return out
 
 
 def apply_to_model(model_path: str, log: AssumptionsLog) -> int:
