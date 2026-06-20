@@ -6,14 +6,17 @@ import openpyxl
 from engine import canonical_schema as cs
 
 
-def test_known_sectors_have_deltas():
-    assert set(cs.known_sectors()) == set(cs.SECTORS)
-    assert cs.SECTORS == (cs.OIL_AND_GAS, cs.TELECOM)
+def test_known_sectors_are_disk_driven():
+    # the set of sectors is whatever has a delta on disk — nothing hardcoded
+    sectors = cs.known_sectors()
+    assert sectors, "expected at least one sector with a delta"
+    assert all(cs.has_delta(s) for s in sectors)
+    assert sectors == tuple(sorted(sectors))
 
 
 def test_required_labels_is_base_plus_delta():
     base = set(cs.UNIVERSAL_BASE_FINANCIAL)
-    for sector in cs.SECTORS:
+    for sector in cs.known_sectors():
         req = cs.required_labels(sector)
         fin = set(req[cs.FINANCIALS])
         assert base <= fin, f"{sector} financial req must include the universal base"

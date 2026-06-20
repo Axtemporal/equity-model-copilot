@@ -8,6 +8,14 @@
 # Telecom keys its build off disclosed EBITDA + margin (not a per-expense build), carries the
 # segment memo-revenue split, and reconstructs the cash bridge — hence the divergent delta.
 # Universal base (shared by every sector) lives in engine/canonical_schema.py, not here.
+
+# Distinctive operational labels that flag this sector (>=2 present => detected). Read
+# generically by the data-driven detector — no sector is hardcoded in Python.
+signals:
+  - "ARPU total"
+  - "Total lines"
+  - "ARPU TIM Live"
+
 required:
   Input Financials:
     - "(+/-) Net financial result"

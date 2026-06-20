@@ -5,12 +5,30 @@ fail-fast input validation in front of the build, and the heavy recalc verificat
 """
 from __future__ import annotations
 
+import importlib
+import importlib.util
+
 import openpyxl
 
-from ..canonical_schema import OIL_AND_GAS, TELECOM
 from . import verify_model
 from .report import Report
 from .validator import assert_valid_input, detect_sector
+
+
+def _select_builder(sector: str | None):
+    """Pick the build engine for a sector WITHOUT hardcoding any sector.
+
+    A sector with a dedicated engine module (engine/build_model_<slug>.py) uses it; every other
+    sector uses the default engine, which builds bottom-up when per-asset data is present and a
+    generic top-down layer otherwise. Adding a dedicated build for a new sector = drop a
+    build_model_<slug>.py file; no change here.
+    """
+    if sector:
+        module = f"engine.build_model_{sector}"
+        if importlib.util.find_spec(module):
+            return importlib.import_module(module)
+    from engine import build_model
+    return build_model
 
 
 def build_and_verify(
@@ -31,12 +49,7 @@ def build_and_verify(
     """
     assert_valid_input(input_path, sector)
     sector = sector or detect_sector(openpyxl.load_workbook(input_path))
-    if sector == OIL_AND_GAS:
-        from engine import build_model as builder
-    elif sector == TELECOM:
-        from engine import build_model_telecom as builder
-    else:
-        raise ValueError(f"unknown sector: {sector!r}")
+    builder = _select_builder(sector)
     builder.main(input_path, output_path)
     if assumptions_log is not None:
         from ..assumptions import AssumptionsLog, apply_to_model
@@ -66,7 +79,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("input", help="filled input .xlsx")
     parser.add_argument("output", help="path to write the model .xlsx")
-    parser.add_argument("--sector", default=None, choices=[None, OIL_AND_GAS, TELECOM])
+    parser.add_argument("--sector", default=None,
+                        help="optional sector slug; auto-detected from the input when omitted")
     parser.add_argument("--backend", default="formulas")
     parser.add_argument("--no-verify", action="store_true")
     args = parser.parse_args()

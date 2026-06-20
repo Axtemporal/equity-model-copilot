@@ -11,7 +11,7 @@ import re
 
 import openpyxl
 
-from ..canonical_schema import OIL_AND_GAS, SECTORS, TELECOM, required_labels
+from ..canonical_schema import known_sectors, required_labels
 from .invariants import ERROR_VALUES, LABEL_COL, find_label_row, period_columns
 from .report import CellRef, InvariantResult, Report, Severity
 
@@ -19,9 +19,9 @@ _QUARTER_RE = re.compile(r"^[1-4]Q\d{2}$")
 _YEAR_RE = re.compile(r"^\d{4}$")
 
 # Exact labels each sector's engine looks up by string (a typo here is a build-time KeyError).
-# Sourced from the canonical schema (universal base + per-sector delta) — the single source of
-# truth — so the validated set matches what the engine actually hard-reads, not a stale subset.
-REQUIRED_LABELS = {sector: required_labels(sector) for sector in SECTORS}
+# Sourced from the canonical schema (universal base + per-sector delta), over the sectors that
+# exist on disk — so the validated set matches what the engine hard-reads, with no hardcoded list.
+REQUIRED_LABELS = {sector: required_labels(sector) for sector in known_sectors()}
 
 
 class InputValidationError(Exception):
@@ -33,15 +33,22 @@ class InputValidationError(Exception):
 
 
 def detect_sector(wb) -> str | None:
-    """O&G if the operational tab is per-asset; telecom if it is segment-based; else None."""
+    """Detect the sector from the operational tab's declared signals (data-driven, agnostic).
+
+    Delegates to template_loader.identify_sector, which matches each sector's signals from the
+    knowledge base — so no sector is hardcoded here. None when ambiguous → the caller asks.
+    """
     if "Input Operational" not in wb.sheetnames:
         return None
     op = wb["Input Operational"]
-    if find_label_row(op, "PRODUCTION BY ASSET") is not None:
-        return OIL_AND_GAS
-    if find_label_row(op, "Total lines") is not None:
-        return TELECOM
-    return None
+    labels = {
+        op.cell(r, LABEL_COL).value.strip(): r
+        for r in range(1, op.max_row + 1)
+        if isinstance(op.cell(r, LABEL_COL).value, str) and op.cell(r, LABEL_COL).value.strip()
+    }
+    from ..template_loader import identify_sector
+
+    return identify_sector(labels)
 
 
 def _labels(ws) -> set[str]:
@@ -71,8 +78,8 @@ def validate_input(source, sector: str | None = None) -> Report:
     if sector not in REQUIRED_LABELS:
         results.append(InvariantResult(
             "sector", Severity.FAIL, False,
-            "could not determine sector — Input Operational needs 'PRODUCTION BY ASSET' (O&G) "
-            "or 'Total lines' (telecom)",
+            "could not determine the sector from the operational signals — pass --sector "
+            "explicitly, or ensure the input carries the sector's declared signal labels",
         ))
         return Report(path, "validator", results)
     results.append(InvariantResult("sector", Severity.INFO, True, f"sector detected: {sector}"))

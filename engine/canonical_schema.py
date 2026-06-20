@@ -13,7 +13,10 @@ The Fase 1 layered minimum (see flow_sistema_e_progresso.md §Fase 1):
 `required_labels(sector)` -> {sheet: [labels]} = base + delta: the labels that sector's
 engine hard-reads, so "the validator passes" means "the engine will not KeyError on a label".
 
-Import the slug constants (OIL_AND_GAS, TELECOM) — never write the string literal again.
+The system is SECTOR-AGNOSTIC: the set of sectors is whatever has a delta on disk
+(`known_sectors()`), and detection signals are declared per-sector in the delta — no sector is
+enumerated in code. `OIL_AND_GAS` below is just a convenience slug ref for the lone sector that
+also has a dedicated bottom-up engine; everything else flows through the generic build.
 """
 from __future__ import annotations
 
@@ -27,10 +30,9 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SECTOR_DELTA_DIR = ROOT / "templates" / "sectors"
 
-# ─── canonical sector slugs (one family — the single source of truth for the slug) ──────
+# ─── slug refs (convenience only — the set of sectors is disk-driven, see known_sectors) ──────
 OIL_AND_GAS = "oil_and_gas"
 TELECOM = "telecom"
-SECTORS = (OIL_AND_GAS, TELECOM)
 
 FINANCIALS = "Input Financials"
 OPERATIONAL = "Input Operational"
@@ -73,18 +75,29 @@ UNIVERSAL_BASE_FINANCIAL = INCOME_STATEMENT_BASE + BALANCE_SHEET_BASE
 STRUCTURAL = ["memo: Shares outstanding (EOP)"]
 
 
-@lru_cache(maxsize=16)
-def load_delta(sector: str) -> dict:
-    """templates/sectors/<sector>.delta.yaml -> {'Input Financials': [...], 'Input Operational': [...]}.
-
-    Returns {} when the file is absent (a sector with a card but no machine schema yet).
-    """
+@lru_cache(maxsize=32)
+def _load_delta_file(sector: str) -> dict:
+    """The whole templates/sectors/<sector>.delta.yaml as a dict ({} if absent)."""
     path = SECTOR_DELTA_DIR / f"{sector}.delta.yaml"
     if not path.exists():
         return {}
     with open(path, encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
-    return data.get("required", {}) or {}
+        return yaml.safe_load(handle) or {}
+
+
+def load_delta(sector: str) -> dict:
+    """The 'required' block: {'Input Financials': [...], 'Input Operational': [...]} ({} if absent)."""
+    return _load_delta_file(sector).get("required", {}) or {}
+
+
+def detection_signals(sector: str) -> list[str]:
+    """Distinctive operational labels that flag this sector, declared in its delta."""
+    return _load_delta_file(sector).get("signals", []) or []
+
+
+def signals_by_sector() -> dict[str, list[str]]:
+    """{slug: [signals]} across every sector with a delta — the data-driven detector's source."""
+    return {sector: detection_signals(sector) for sector in known_sectors()}
 
 
 def has_delta(sector: str) -> bool:

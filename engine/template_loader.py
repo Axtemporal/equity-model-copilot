@@ -42,13 +42,10 @@ LIFT_SECTION         = "LIFTING COST BY ASSET"
 CAPEX_SECTION        = "CAPEX BY ASSET"
 ASSET_MAX_SLOTS      = 8
 
-# Bootstrap sector-identification heuristic: distinctive operational labels per sector.
-# This is a deterministic fallback; the AI layer does the real identification by reading
-# the input + card. Returns None when no signal matches → the caller asks the user.
-SECTOR_SIGNALS = {
-    "oil_and_gas": ["Brent average", "Sales volume", ASSET_SECTION_HEADER],
-    "telecom":     ["ARPU total", "Total lines", "ARPU TIM Live"],
-}
+# Sector-identification is DATA-DRIVEN: each sector declares its distinctive operational
+# signals in templates/sectors/<slug>.delta.yaml (read via canonical_schema.signals_by_sector).
+# No sector is hardcoded here — adding one needs no code change. The heuristic is a deterministic
+# bootstrap; the AI layer / user does the real identification when signals are ambiguous.
 
 
 # ─── base.yaml loading ────────────────────────────────────────────────────────
@@ -99,12 +96,20 @@ def identify_company(fin_sheet) -> str:
     return (fin_sheet["B1"].value or "Unknown").strip()
 
 
-def identify_sector(op_labels: dict[str, int], sector: str | None = None) -> str | None:
-    """Return the sector slug. If `sector` is given, trust it. Otherwise match
-    distinctive operational labels. Returns None when ambiguous → caller asks."""
+def identify_sector(op_labels, sector: str | None = None) -> str | None:
+    """Return the sector slug. If `sector` is given, trust it. Otherwise match each sector's
+    declared signals (>=2 present) from the knowledge base. None when ambiguous → caller asks.
+
+    `op_labels` may be a dict (label→row) or any container supporting `in` over labels.
+    """
     if sector:
         return sector
-    for slug, signals in SECTOR_SIGNALS.items():
+    try:                                  # works whether imported as engine.template_loader…
+        from . import canonical_schema as cs
+    except ImportError:                   # …or as a bare top-level module (build_model does that)
+        import canonical_schema as cs
+
+    for slug, signals in cs.signals_by_sector().items():
         if sum(1 for s in signals if s in op_labels) >= 2:
             return slug
     return None

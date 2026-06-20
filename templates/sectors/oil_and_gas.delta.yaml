@@ -6,6 +6,14 @@
 # (a mismatch is a build-time KeyError) — see tests/test_canonical_schema.py for the guard.
 #
 # Universal base (shared by every sector) lives in engine/canonical_schema.py, not here.
+
+# Distinctive operational labels that flag this sector (>=2 present => detected). Read
+# generically by the data-driven detector — no sector is hardcoded in Python.
+signals:
+  - "Brent average"
+  - "Sales volume"
+  - "PRODUCTION BY ASSET"
+
 required:
   Input Financials:
     - "(-) Cost of goods sold"

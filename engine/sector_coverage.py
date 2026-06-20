@@ -6,9 +6,9 @@ method card, the machine-readable delta schema, and the known build engines. Two
      has no path downstream — so detection can never confirm a dead-end sector.
   2. Answer "o que dá pra modelar hoje?" as a plain CLI report.
 
-Tiers:
-  A (full)    — card + delta + dedicated builder.
-  B (partial) — card exists, but no delta and/or only the generic top-down builder.
+Tiers (no sector hardcoded — derived from what exists on disk):
+  A (full)    — card + delta: fully specified for intake + grounding.
+  B (partial) — card only (no delta yet): intake degraded, the build falls back to generic.
   C (none)    — no card -> blocked.
 """
 from __future__ import annotations
@@ -21,10 +21,6 @@ from . import canonical_schema as cs
 ROOT = Path(__file__).resolve().parent.parent
 CARDS_DIR = ROOT / "knowledge" / "sector_modeling_rules" / "sectors"
 
-# Sectors with a dedicated build engine (Fase 3). The generic top-down build handles any other
-# sector that has a financial schema, at lower fidelity (-> Tier B).
-BUILDERS = {cs.OIL_AND_GAS, cs.TELECOM}
-
 TIER_FULL = "A"
 TIER_PARTIAL = "B"
 TIER_NONE = "C"
@@ -36,7 +32,6 @@ class Coverage:
     tier: str
     has_card: bool
     has_delta: bool
-    has_builder: bool
 
     @property
     def blocked(self) -> bool:
@@ -65,14 +60,13 @@ def _has_card(sector: str) -> bool:
 def coverage(sector: str) -> Coverage:
     has_card = _has_card(sector)
     has_delta = cs.has_delta(sector)
-    has_builder = sector in BUILDERS
     if not has_card:
         tier = TIER_NONE
-    elif has_card and has_delta and has_builder:
+    elif has_delta:
         tier = TIER_FULL
     else:
         tier = TIER_PARTIAL
-    return Coverage(sector, tier, has_card, has_delta, has_builder)
+    return Coverage(sector, tier, has_card, has_delta)
 
 
 def available_cards() -> list[str]:
@@ -105,7 +99,7 @@ def report() -> str:
     """Human-readable 'what can we model today?' summary."""
     tiers = by_tier()
     lines = ["Sector coverage:"]
-    lines.append(f"  [A] full (card + delta + builder): {', '.join(tiers[TIER_FULL]) or '(none)'}")
+    lines.append(f"  [A] full (card + delta): {', '.join(tiers[TIER_FULL]) or '(none)'}")
     lines.append(f"  [B] partial (card only, generic build): {', '.join(tiers[TIER_PARTIAL]) or '(none)'}")
     return "\n".join(lines)
 
