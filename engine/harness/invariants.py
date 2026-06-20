@@ -358,6 +358,55 @@ def inv14_sign_conventions(orig, calc) -> InvariantResult:
     return InvariantResult("sign_conventions", Severity.WARN, passed, msg, failing[:30])
 
 
+def inv_valuation_disclaimer(orig, calc) -> InvariantResult:
+    """COMPLIANCE: any sheet that prints an implied value-per-share must carry the
+    'not a price target / recommendation' disclaimer, emitted by the engine (never left to the
+    conversation). Enforces the non-negotiable 'no target price in the MVP' rule at build time."""
+    problems = []
+    for sheet in orig.sheetnames:
+        ws = orig[sheet]
+        has_per_share = has_disclaimer = False
+        for row in ws.iter_rows():
+            for cell in row:
+                if not isinstance(cell.value, str):
+                    continue
+                stripped = cell.value.strip().lower()
+                # match the actual OUTPUT label, not prose that mentions the phrase (e.g. the Cover)
+                if stripped.startswith("(=) implied value per share"):
+                    has_per_share = True
+                if "not a price target" in stripped or "not a recommendation" in stripped:
+                    has_disclaimer = True
+        if has_per_share and not has_disclaimer:
+            problems.append(f"'{sheet}' shows an implied value per share without a price-target disclaimer")
+    passed = not problems
+    msg = "value-per-share outputs carry the no-target-price disclaimer" if passed else "; ".join(problems)
+    return InvariantResult("valuation_disclaimer", Severity.FAIL, passed, msg)
+
+
+def inv_assumptions_provenance(orig, calc) -> InvariantResult:
+    """COMPLIANCE: every APPROVED row on the Assumptions tab carries method + source.
+
+    Mirrors the assumptions.approve() gate as a build-time invariant, so a value can never reach
+    the model as 'approved' without provenance even if the conversation forgot. Column layout
+    follows assumptions._render_assumptions_tab (col 5 line, 8 method, 9 source, 12 status)."""
+    sheet = "Assumptions"
+    if sheet not in orig.sheetnames:
+        return InvariantResult("assumptions_provenance", Severity.FAIL, True, "no Assumptions tab")
+    ws = orig[sheet]
+    failing = []
+    for row in range(5, ws.max_row + 1):
+        status = ws.cell(row, 12).value
+        if isinstance(status, str) and status.strip() == "Aprovada":
+            method, source = ws.cell(row, 8).value, ws.cell(row, 9).value
+            if not (isinstance(method, str) and method.strip()) or not (isinstance(source, str) and source.strip()):
+                line = ws.cell(row, 5).value
+                failing.append(CellRef(sheet, f"B{row}", actual=f"{line!r} approved without method/source"))
+    passed = not failing
+    msg = ("approved assumptions carry method+source" if passed
+           else f"{len(failing)} approved assumption(s) lack method or source")
+    return InvariantResult("assumptions_provenance", Severity.FAIL, passed, msg, failing[:30])
+
+
 # Registry. Foundation item 4 appends its schedule tie-out checks here.
 INVARIANTS = [
     inv16_structure,
@@ -367,4 +416,6 @@ INVARIANTS = [
     inv10_history_fidelity,
     inv12_no_error_cells,
     inv14_sign_conventions,
+    inv_valuation_disclaimer,
+    inv_assumptions_provenance,
 ]
