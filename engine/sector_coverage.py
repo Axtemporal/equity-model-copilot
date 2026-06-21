@@ -47,8 +47,8 @@ class SectorCoverageError(Exception):
         self.partial = partial
         super().__init__(
             f"no sector knowledge base for {sector!r}. Today you can model — "
-            f"full: {', '.join(full) or '(none)'}; "
-            f"partial (generic build): {', '.join(partial) or '(none)'}. "
+            f"full (card + delta): {', '.join(full) or '(none)'}; "
+            f"partial (card only, no machine schema): {', '.join(partial) or '(none)'}. "
             f"Pick one of these, or author the card + delta for {sector!r} first."
         )
 
@@ -100,7 +100,7 @@ def report() -> str:
     tiers = by_tier()
     lines = ["Sector coverage:"]
     lines.append(f"  [A] full (card + delta): {', '.join(tiers[TIER_FULL]) or '(none)'}")
-    lines.append(f"  [B] partial (card only, generic build): {', '.join(tiers[TIER_PARTIAL]) or '(none)'}")
+    lines.append(f"  [B] partial (card only, no machine schema): {', '.join(tiers[TIER_PARTIAL]) or '(none)'}")
     return "\n".join(lines)
 
 
