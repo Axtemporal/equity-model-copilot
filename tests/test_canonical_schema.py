@@ -22,21 +22,14 @@ def test_required_labels_is_base_plus_delta():
         assert base <= fin, f"{sector} financial req must include the universal base"
         # the delta adds sector-specific lines on top of the base
         assert fin - base == set(cs.load_delta(sector).get(cs.FINANCIALS, []))
-        assert req[cs.OPERATIONAL]  # both pilots disclose operational drivers
+        assert req[cs.OPERATIONAL]  # the sector discloses operational drivers
 
 
 def test_oil_and_gas_delta_has_sector_specifics():
     fin = cs.required_labels(cs.OIL_AND_GAS)[cs.FINANCIALS]
     assert "(-) Exploration expenses" in fin
     assert "(+/-) Financial result" in fin            # O&G spelling
-    assert "(+/-) Net financial result" not in fin    # telecom spelling stays out
-
-
-def test_telecom_delta_has_sector_specifics():
-    fin = cs.required_labels(cs.TELECOM)[cs.FINANCIALS]
-    assert "(=) EBITDA (as disclosed)" in fin
-    assert "(+/-) Net financial result" in fin        # telecom spelling
-    assert "(-) Exploration expenses" not in fin      # O&G line stays out
+    assert "(+/-) Net financial result" not in fin    # an alternative spelling stays out
 
 
 def test_synth_input_satisfies_oil_and_gas_required(synth_inputs):

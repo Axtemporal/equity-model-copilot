@@ -8,14 +8,13 @@ def test_statement_line():
     assert rc.classify("PP&E", cs.OIL_AND_GAS) == rc.STATEMENT
 
 
-def test_disclosed_ebitda_is_reported_check_even_for_telecom():
-    # telecom keys its build off it, but the INTAKE role is reported-check
-    assert rc.classify("(=) EBITDA (as disclosed)", cs.TELECOM) == rc.REPORTED_CHECK
+def test_disclosed_ebitda_is_reported_check():
+    # a disclosed aggregate: its INTAKE role is reported-check (reconciled post-build)
+    assert rc.classify("(=) EBITDA (as disclosed)", cs.OIL_AND_GAS) == rc.REPORTED_CHECK
 
 
 def test_operational_raw():
     assert rc.classify("Brent average", cs.OIL_AND_GAS) == rc.OPERATIONAL_RAW
-    assert rc.classify("Total lines", cs.TELECOM) == rc.OPERATIONAL_RAW
 
 
 def test_capital_structure_fact():

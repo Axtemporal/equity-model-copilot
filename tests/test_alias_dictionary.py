@@ -19,7 +19,7 @@ def test_add_writes_to_override_and_resolves(tmp_path):
     override = tmp_path / "override.yaml"
     ad = AliasDictionary(override_path=override)
     ad.add("Receita de serviços", "(=) Net revenue",
-           provenance="confirmed in TIM intake", confirmed_by="analyst")
+           provenance="confirmed during intake", confirmed_by="analyst")
     # resolvable in this instance...
     assert ad.resolve("Receita de serviços") == "(=) Net revenue"
     # ...and persisted for a fresh load of the same override layer

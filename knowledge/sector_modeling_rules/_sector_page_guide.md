@@ -13,7 +13,7 @@ last_reviewed: 2026-06-20
 
 This guide teaches a Claude chat, starting with no prior context, how to make a **brand-new sector** modelable by this system — any sector: a bank, a utility, a retailer, a miner, a hospital chain, an airline, a software company. The system is **sector-agnostic by construction**: a sector enters as *data and prose* (a method card + a machine schema + an operational recipe), and only occasionally as *code* (a dedicated build function).
 
-> **Framing — read this first.** Oil & Gas and Telecom are the only two sectors that have a dedicated build engine today. They are used in this guide **only as labelled examples** of two contrasting archetypes (bottom-up volume×price vs. margin-down-from-EBITDA). **They are not targets, not defaults, and not the shape your sector must take.** When you see an `EXAMPLE (O&G)` or `EXAMPLE (telecom)` block, read it as "here is one concrete instantiation of the pattern", then design *your* sector from its own economics.
+> **Framing — read this first.** Oil & Gas is the only sector with dedicated build code today (the bottom-up volume×price path *inside* `build_model`); it appears here **only as a labelled example**, not a target, default, or the shape your sector must take. The other archetype this guide uses — **margin-down-from-disclosed-EBITDA** — is a generic pattern, not a shipped engine. When you see an `EXAMPLE` block, read it as "one concrete instantiation of the pattern", then design *your* sector from its own economics.
 
 This guide is a **supplement** to [`_schema.md`](_schema.md) (the card contract) and the wiki concept contract. It does **not** restate the 7-section card structure — `_schema.md` owns that. It adds only the buildable + machine artifacts the card schema does not cover, and tells you how everything plugs into the engine.
 
@@ -35,7 +35,7 @@ There are **two independent things** you can ship for a sector, and they do comp
 
    - **Path A — bottom-up** (volume × price, per asset): fires *only* for the literal slug `oil_and_gas` with assets (`if og:` branch, `build_model.py:556-586,675-745`).
    - **Path B — generic top-down** (revenue-growth × margin): the `else:` branch — everything else (`build_model.py:587-615,747-792`).
-   - Telecom is a **third, separate script** (`build_model_telecom.py`) — not dispatched from `main()` at all; it is a standalone fork of the whole pipeline.
+   - A sector whose economics fit neither path can ship a **dedicated engine** as `engine/build_model_<slug>.py`, auto-discovered by `pipeline._select_builder` (a standalone fork). None ships today — O&G's bottom-up path lives *inside* `build_model.main`.
 
 The machine schema (`<slug>.delta.yaml`) sits *between* these: it declares **which input labels must exist** and lets the validator prove "the engine will not KeyError". It does **not** emit statements.
 
@@ -204,14 +204,14 @@ Specify each operational line as a small table mirroring an `add_line()` call:
 
 The statements are wired by **row handles**, not labels. The operational section returns handles (`row_rev`, `row_cogs`, `row_depl`, `row_capext`, and the O&G triple `row_liftc`/`row_royc`) and the IS/BS/CF/Schedules/Valuation consume them by sheet-qualified cell refs. **This row-handle interface is the implicit ABI** between the operational section and the rest of the engine. (`build_model.py:768-792`; IS COGS branch `if og:` `:892-899`; PP&E corkscrew additions=capex / reductions=depletion in `corkscrew`, `:798-818`.)
 
-> **The ABI is a contract WITHIN one `main()`, not across engines.** O&G (Path A) and the generic (Path B) branches share the *same* downstream IS/BS/CF/Valuation, so they must both expose the same handles. The unused handles are set to `None` per path: O&G sets `row_cogs = None` (`:745`); the generic branch sets `row_liftc = row_royc = None` (`:792`). The IS COGS formula then **branches on `og`** (`:892-897`) to pick which handles to read. The **only** Tier-A precedent, telecom, does NOT plug into this — `build_model_telecom.py` forks the *entire* pipeline into a standalone script and reuses none of the shared `is_line`/`corkscrew`/`add_valuation_tab` machinery. So decide which model your builder follows (§5/§10.3): **plug into `build_model.main()`** (then you owe the exact ABI *and* a new `og`-style dispatch branch + a COGS branch) **or fork like telecom** (then you reimplement downstream and the ABI is only advisory).
+> **The ABI is a contract WITHIN one `main()`, not across engines.** O&G (Path A) and the generic (Path B) branches share the *same* downstream IS/BS/CF/Valuation, so they must both expose the same handles. The unused handles are set to `None` per path: O&G sets `row_cogs = None` (`:745`); the generic branch sets `row_liftc = row_royc = None` (`:792`). The IS COGS formula then **branches on `og`** (`:892-897`) to pick which handles to read. A **dedicated `build_model_<slug>.py`** (auto-discovered by `_select_builder`) does NOT plug into this — it forks the *entire* pipeline into a standalone script and reuses none of the shared `is_line`/`corkscrew`/`add_valuation_tab` machinery. So decide which model your builder follows (§5/§10.3): **plug into `build_model.main()`** (then you owe the exact ABI *and* a new `og`-style branch + a COGS branch) **or fork into a standalone `build_model_<slug>.py`** (then you reimplement downstream and the ABI is only advisory).
 
 What is genuinely sector-specific:
 
 1. **Revenue identity into the IS.** Path B: `(=) Net revenue` grows by `rev_growth`. A bottom-up/multi-stream sector instead sums its driver-built segment lines into net revenue — and that requires a builder (§5).
 2. **The cost / EBIT direction.** Two archetypes:
    - **Expense-up-to-EBIT** (O&G style): COGS reconstructed from operational cost rows; `GP − G&A − … = EBIT`; `EBITDA = EBIT + DD&A` as a derived memo.
-   - **Margin-down-from-EBITDA** (telecom style): keys off a disclosed-EBITDA margin premise (`opex ex-D&A = -rev × (1 − margin)`), `EBITDA = rev + opex`, `EBIT = EBITDA − D&A`.
+   - **Margin-down-from-disclosed-EBITDA** archetype: keys off a disclosed-EBITDA margin premise (`opex ex-D&A = -rev × (1 − margin)`), `EBITDA = rev + opex`, `EBIT = EBITDA − D&A`.
    State which one your sector uses — it dictates which IS rows exist and the formula *direction*.
 3. **D&A and capex drivers.** Specify the D&A driver (unit-of-production rate? % of PP&E? flat per-period?) and the capex driver (per-asset? sales-to-capital? flat?), and which schedule rows they feed.
 4. **Sector-specific lines that appear or stay dormant.** Enumerate which extra lines your statements carry (e.g. a regulated-asset-base roll-forward, a loss-provision schedule, a spectrum/intangible amortisation block) and which base lines you leave at zero. **Beware:** the shared IS already builds an `(+/-) Other operating income (expenses)` row whose generic formula subtracts the lease-depreciation premise (`build_model.py:908-911`), and an ARO accretion term inside the financial result (`:917-919`) — for *every* sector, O&G or not. They are harmless at a 0 seed but present and not removable without code (§6).
@@ -237,7 +237,7 @@ This is the most important design decision. Decide it explicitly in card §5 and
 
 **Use the generic top-down path (Path B) when** the sector's economics are honestly "revenue grows at a rate, costs are a margin." Provide a card + the canonical input labels **including the §7.2 financial extras** and you get a balancing three-statement + Valuation model with no new code; the disclosed drivers appear as memo lines. This is the **happy path** — aim a new sector here first. **It is "no new build function", NOT "no financial schema":** the §7.2 labels are still mandatory or the build crashes (§0/§7).
 
-**You need a dedicated builder (a new `build_model_<slug>.py`, the telecom precedent) when** the revenue identity is **multi-stream, roll-forward-based, or margin-down-from-EBITDA** — anything Path B's single-line `rev_growth × margin` gets economically wrong. Signals you need a builder:
+**You need a dedicated builder (a new `build_model_<slug>.py`) when** the revenue identity is **multi-stream, roll-forward-based, or margin-down-from-EBITDA** — anything Path B's single-line `rev_growth × margin` gets economically wrong. Signals you need a builder:
 
 - revenue must **sum several driver-built segment lines** (subscribers × ARPU per segment; volume × price per commodity; members × premium);
 - a **stock corkscrew drives revenue** (subscriber base, regulated asset base, loan book);
@@ -246,7 +246,7 @@ This is the most important design decision. Decide it explicitly in card §5 and
 
 **Per-asset bottom-up (Path A)** is *O&G-specific code*. Do not assume a new bottom-up sector can reuse it — `scan_assets`, the per-asset capex-total offset (`capex_header + max_slots + 1`, `build_model.py:740`), and the consolidated Brent/Realized/Sales-volume labels are all O&G-shaped. A different per-asset sector needs its own introspection + builder.
 
-> **EXAMPLE — telecom (separate-engine precedent).** Card demands subscriber-corkscrew × ARPU by segment + service-vs-handset split + EBITDA-AL. This cannot run through Path B, so it lives in `build_model_telecom.py` with its own seeds and its own financial labels (`(=) EBITDA (as disclosed)`, `(-) Operating expenses (ex-D&A)`, segment memo revenues, its own cash-bridge lines). It is invoked as a standalone script — **adding a delta does not auto-route a sector to a custom engine; that wiring is a separate manual step (§11).**
+> **EXAMPLE — a subscription-style sector (illustrative).** Suppose the card demands a subscriber-corkscrew × ARPU by segment + a service-vs-handset split + EBITDA-AL. That cannot run through Path B, so it would live in a dedicated `engine/build_model_<slug>.py` with its own seeds and financial labels (e.g. `(=) EBITDA (as disclosed)`, `(-) Operating expenses (ex-D&A)`, segment memo revenues, its own cash-bridge lines), **auto-discovered by `_select_builder`** — the filename is the wiring (§11).
 
 ---
 
@@ -299,7 +299,7 @@ The build reads lines by **exact string match**. **There are two different reade
 | `Cash — end of period` | CF `cash_line`, `:1080` |
 | `(-) Capex` | **optional** — read only `if "(-) Capex" in frow` (`:789-790`) |
 
-**The first nine are EXACTLY the `oil_and_gas.delta.yaml` financial list.** The two `Cash — …` lines are read by the shared CF code but currently live only in `telecom.delta.yaml`. **Every Tier-B sector MUST carry all of these on its input tab (and declare them in its delta), except `(-) Capex` which is optional.** Absent ⇒ `KeyError`, not a silent 0. This is why a Tier-B delta is **not optional**.
+**The first nine are EXACTLY the `oil_and_gas.delta.yaml` financial list.** The two `Cash — …` lines are read by the shared CF code but sit in **no current delta** (carry them on your input tab and declare them in your delta). **Every Tier-B sector MUST carry all of these (and declare them), except `(-) Capex` which is optional.** Absent ⇒ `KeyError`, not a silent 0. This is why a Tier-B delta is **not optional**.
 
 ### 7.3 The universal base (already shared — never re-list it in a delta)
 
@@ -338,8 +338,8 @@ This is an engine invariant, not a courtesy. `assumptions.approve()` raises `Ass
 
 The deterministic gate (`sector_coverage.py`) classifies every sector:
 
-- **Tier A (full):** card **+** delta **+** a dedicated builder. `BUILDERS = {oil_and_gas, telecom}` — and that set is **code**, not data.
-- **Tier B (partial):** card exists, but no dedicated builder → the generic top-down Path B model (with the §7.2 financial labels carried).
+- **Tier A (full):** card **+** delta. `sector_coverage.coverage()` reads this from disk — there is **no hardcoded builder list**; a dedicated builder, if any, is auto-discovered by naming convention (`build_model_<slug>.py`).
+- **Tier B (partial):** card only, no machine delta. Intake is degraded. **Caveat:** the *build* is not yet sector-agnostic — the shared statement code is O&G-shaped (§7.2), so a genuinely new sector also needs the financial template generalized (backlog) before it builds end-to-end.
 - **Tier C (none):** no card → **blocked** at Fase 1 intake, with the list of what *is* modelable.
 
 **You cannot make a sector Tier A by authoring prose + YAML alone.** Tier A requires a builder. Authoring a card + delta lands you at **Tier B**, and that is a perfectly good, honest outcome for a sector with simple top-down economics. State plainly in card §7 where the sector lands and exactly what is missing to reach A (the builder, and which schedules/labels it would need). **Overclaiming coverage is a compliance failure** that mirrors the ⚠️/🟡 discipline.
@@ -366,7 +366,7 @@ Card discipline that matters for the engine:
 
 ### 10.2 The machine delta — `templates/sectors/<slug>.delta.yaml`
 
-The file has **two top-level keys** (verify against `oil_and_gas.delta.yaml` / `telecom.delta.yaml`):
+The file has **two top-level keys** (verify against `oil_and_gas.delta.yaml`):
 
 ```yaml
 signals:                       # >=2 present in the operational tab => sector auto-detected
@@ -390,8 +390,8 @@ Rules:
 - **How to derive the list:**
   - **Tier B (no builder of your own):** you are **NOT writing a build function** — your sector rides the shared generic path. So do **not** "grep your build function" (you have none). The labels you must satisfy come from the **shared** code in `build_model.py`: the `is_line`/`cf_line`/`bs_line`/`corkscrew` calls (`:855-1162`) and the generic seed/operational blocks (`:587-639,746-792`). The concrete answer is already enumerated for you in **§7.2** — copy that list. Do not invent fresh spellings.
   - **Tier A (you write `build_model_<slug>.py`):** grep *your* build function for every `frow['...']` / `hist_fin('...')` / `orow['...']` key that is **not** in `UNIVERSAL_BASE_FINANCIAL`, and list exactly those.
-- **Divergent spellings are intentional — preserve them, don't unify.** The same economic concept gets a different spelling per sector precisely so the delta can diverge (e.g. O&G `(+/-) Financial result` vs. telecom `(+/-) Net financial result`; O&G `memo: (+) Depreciation, depletion & amortization` vs. telecom `(-) Depreciation & amortization`). Match the spelling **the build that runs for your sector** actually reads; **never invent a fresh spelling.**
-- **Reported aggregates the build keys off** (`(=) EBITDA (as disclosed)`, `EBITDA-AL`, `Net debt`) are intentionally classified `REPORTED_CHECK` by `role_classifier` **even when required**. Do **not** remove them from the delta to "make the role consistent" — telecom legitimately requires `(=) EBITDA (as disclosed)` as an input it divides by margin, yet intake-tags it reported-check. The split is by design.
+- **Divergent spellings are intentional — preserve them, don't unify.** The same economic concept can get a different spelling per sector precisely so deltas can diverge (e.g. one sector's `(+/-) Financial result` vs. another's `(+/-) Net financial result`; `memo: (+) Depreciation, depletion & amortization` vs. `(-) Depreciation & amortization`). Match the spelling **the build that runs for your sector** actually reads; **never invent a fresh spelling.**
+- **Reported aggregates the build keys off** (`(=) EBITDA (as disclosed)`, `EBITDA-AL`, `Net debt`) are intentionally classified `REPORTED_CHECK` by `role_classifier` **even when required**. Do **not** remove them from the delta to "make the role consistent" — a margin-from-EBITDA sector legitimately requires `(=) EBITDA (as disclosed)` as an input it divides by margin, yet intake-tags it reported-check. The split is by design.
 - **For a bottom-up sector**, the ALL-CAPS **section headers** are legitimate `Input Operational` entries (they are hard-read via `orow[HEADER]`), but remember `scan_assets` is hardwired to the O&G header names — a different bottom-up layout needs its own introspection code, not just delta entries.
 
 ### 10.3 The operational/statement build recipe
@@ -400,7 +400,7 @@ If Tier B: the recipe is the per-line spec tables (§3.4) describing how the gen
 
 If Tier A: the recipe is the **build function** (`build_model_<slug>.py`). State first which integration model you follow (§4 box):
 - **plug into `build_model.main()`** — then (a) read the delta's labels, (b) build the operational section exposing the **row-handle ABI** (§4), (c) add an `og`-style dispatch branch and a matching COGS branch, (d) wire IS/BS/CF/Schedules/Valuation, (e) keep the **balance check at 0**; or
-- **fork like telecom** — a standalone script that reimplements the downstream; the ABI is then advisory.
+- **fork into a standalone `build_model_<slug>.py`** — reimplements the downstream; the ABI is then advisory.
 Either way: emit the canonical `(=) Implied value per share` label + the verbatim disclaimer (§4.1), and ship a **synthetic input workbook** + a **test** proving no KeyError (§11 step 6).
 
 ---
@@ -409,15 +409,15 @@ Either way: emit the canonical `(=) Implied value per share` label + the verbati
 
 Adding one artifact in isolation breaks the contract tests and/or leaves the sector unreachable. To make a sector **runnable**, not just declared:
 
-1. **`templates/sectors/<slug>.delta.yaml`** — the machine schema (§10.2): `signals:` (≥ 2 distinctive operational labels) + `required:` (financial extras incl. the §7.2 hard-reads; all operational labels). The slug in the filename **must** match the card slug. The set of sectors is **disk-driven**: `canonical_schema.known_sectors()` returns whatever `*.delta.yaml` files exist (`:120-126`) — **adding the file is what registers the sector**; there is no `SECTORS` list to edit in code. (Note: the contract test `test_known_sectors_have_deltas` and a couple of older tests reference a `cs.SECTORS` symbol that is **not** defined in the current `canonical_schema.py` — treat `known_sectors()` as the real API and re-verify the test names before relying on them.)
+1. **`templates/sectors/<slug>.delta.yaml`** — the machine schema (§10.2): `signals:` (≥ 2 distinctive operational labels) + `required:` (financial extras incl. the §7.2 hard-reads; all operational labels). The slug in the filename **must** match the card slug. The set of sectors is **disk-driven**: `canonical_schema.known_sectors()` returns whatever `*.delta.yaml` files exist — **adding the file is what registers the sector**; there is no `SECTORS` list to edit in code (the contract test is `test_known_sectors_are_disk_driven`).
 2. **The card** — `sectors/<slug>.md` (§10.1), same slug.
-3. **The three detectors must agree on the canonical slug** (guarded by `tests/test_slug_concordance.py`): `validator.detect_sector`, `sector_knowledge.detect_sector_from_input`, and `template_loader.identify_sector` must all return the *same* slug for your synth input. `identify_sector` is data-driven off your `signals:`; **but `validator.detect_sector` is NOT** — see step 5.
-4. **Slug discipline:** wherever a slug appears, use the `canonical_schema` constant or the disk-derived slug — **never write a slug string literal twice** (the `oil_and_gas` vs. `oil_gas` bug is why). If you add a convenience ref like `OIL_AND_GAS`/`TELECOM`, mirror that style.
-5. **Make the sector REACHABLE through the documented tooling.** This is the step prior versions of this guide omitted, and without it your sector is unrunnable via the harness pipeline:
-   - **`engine/harness/pipeline.py`** routes **only** `oil_and_gas` → `build_model` and `telecom` → `build_model_telecom`, and **`raise ValueError(f"unknown sector: …")` for anything else** (`:34-39`); its CLI `--sector` is `choices=[None, OIL_AND_GAS, TELECOM]` (`:69`). To reach your sector through the pipeline you must extend that dispatch (route unknown/new sectors to `build_model.main()` for Path B, or to your builder for Tier A) **and** widen the `--sector choices`.
-   - **`engine/harness/validator.py:detect_sector`** (`:35-44`) recognises only `PRODUCTION BY ASSET`→O&G and `Total lines`→telecom, returning `None` otherwise → `assert_valid_input` raises `InputValidationError` **before** the build. Teach it a signal for your sector (or fall back to `signals_by_sector()` / honour an explicit `--sector`).
-   - **Until both edits land, your Tier-B sector runs ONLY via the direct `build_model` entrypoint with an explicit slug** (see §12 step 6), never via `python -m engine.harness.pipeline`.
-6. **(Tier A only) the builder** — `build_model_<slug>.py`, and add the slug to `sector_coverage.BUILDERS`. Note: today only `oil_and_gas` is dispatched from `build_model.main()`; telecom is standalone. **Auto-dispatch wiring is the manual step in #5** — a delta does not route a sector to a custom engine.
+3. **The three detectors must agree on the canonical slug** (guarded by `tests/test_slug_concordance.py`): `validator.detect_sector`, `sector_knowledge.detect_sector_from_input`, and `template_loader.identify_sector` must all return the *same* slug for your synth input. All three are **data-driven off your `signals:`** (`validator.detect_sector` delegates to `identify_sector`) — declaring `signals:` is what makes detection work, no detector code to edit.
+4. **Slug discipline:** use the disk-derived slug (`known_sectors()`) — **never write a slug string literal twice** (the `oil_and_gas` vs. `oil_gas` bug is why). Avoid adding new hardcoded slug constants.
+5. **The sector is reachable automatically — there is NO dispatch code to edit** (the de-hardcoding made this convention-driven):
+   - **`engine/harness/pipeline.py`** picks the builder via `_select_builder`: `engine/build_model_<slug>.py` if it exists, else the default `build_model` (Path A bottom-up when per-asset data is present, else Path B generic). No `ValueError` branch to extend, no `--sector choices` to widen — `--sector` is a free, optional, auto-detected slug.
+   - **`engine/harness/validator.py:detect_sector`** delegates to `template_loader.identify_sector`, which matches the `signals:` you declared in your delta (≥ 2). Declaring `signals:` is the only step — no detector code to teach.
+   - So a Tier-B sector runs through `python -m engine.harness.pipeline` as soon as its card + delta (with `signals:`) exist and its input carries the §7.2 labels.
+6. **(Optional) a dedicated builder** — if Path B's `rev_growth × margin` can't model your sector (§5), add `engine/build_model_<slug>.py` (signature `main(input_path, out_path)`); `_select_builder` auto-discovers it by name. There is **no `BUILDERS` set to update** and no dispatch to wire — the filename IS the wiring.
 7. **A synthetic input + a test:**
    - register a new **`synth_inputs_<slug>` fixture** in `tests/conftest.py` (the existing `synth_inputs` is O&G-only, `:19-21`); the sample workbook's `Input Financials`/`Input Operational` column-B labels must be a **superset** of `required_labels(slug)`;
    - add a test mirroring `test_synth_input_satisfies_oil_and_gas_required` (`tests/test_canonical_schema.py:39-51`) **and** a build-it test asserting no `KeyError`.
@@ -462,7 +462,7 @@ Result: a balancing three-statement model with a Valuation tab, honestly declare
 4. **Write the card** per `_schema.md` (§10.1) — retrieval-friendly headings, links to the delta, REFUTED claims as "do NOT encode."
 5. **Declare the delta** (§10.2) — `signals:` + `required:`; financial extras **including the §7.2 hard-reads** (Tier B) or your build function's non-base reads (Tier A); exact spellings; sheet keys `Input Financials`/`Input Operational`; reported aggregates kept if read. For Tier B copy the §7.2 list — do **not** grep a build function you aren't writing.
 6. **Specify the operational recipe** (§3.4 per-line tables) — and, for Tier A, the build function (state plug-in vs. fork; expose the row-handle ABI; emit the `(=) Implied value per share` label + disclaimer; hold the balance check at 0).
-7. **Wire it** (§11) — delta + card + slug concordance across the three detectors + the pipeline/validator edits that make it reachable (+ builder + `BUILDERS` for Tier A), one slug everywhere.
+7. **Wire it** (§11) — delta (with `signals:`) + card + slug concordance across the three detectors. Detection and builder routing are **automatic** (signals-in-delta + naming convention), so there are no pipeline/validator edits. Tier A additionally ships a `build_model_<slug>.py` (auto-discovered). One slug everywhere.
 8. **Validate against the engine** — `tests/test_canonical_schema.py` + `tests/test_slug_concordance.py` + your synth-input/no-KeyError test, then build with `build_model <input> <output> <slug>` and verify with the harness. The model must balance and not KeyError before you call the sector done. Use the Anaconda python; run `check_env` first.
 
 ---
@@ -476,7 +476,7 @@ Result: a balancing three-statement model with a Valuation tab, honestly declare
 - [ ] Input tab carries the universal base **and** the §7.2 financial labels **verbatim** (else KeyError or silent 0-seed); operational headers ALL-CAPS, drivers mixed-case.
 - [ ] Build path and coverage **tier** declared honestly in card §5/§7; if Tier B, the gap to Tier A is named.
 - [ ] **Reachability wired:** `harness/pipeline.py` dispatch + `--sector` choices extended for the new slug; `harness/validator.py:detect_sector` teaches a signal (or falls back). If not yet done, the model is runnable **only** via `build_model <input> <output> <slug>` — note that explicitly.
-- [ ] (Tier A) `build_model_<slug>.py` states plug-in-vs-fork; exposes the row-handle ABI (if plugging in) or reimplements downstream (if forking); emits `(=) Implied value per share` + the verbatim no-target-price disclaimer (`inv_valuation_disclaimer`); approved assumptions carry method+source (`inv_assumptions_provenance`); keeps the **balance check = 0** every column; added to `BUILDERS`.
+- [ ] (Tier A) `build_model_<slug>.py` states plug-in-vs-fork; exposes the row-handle ABI (if plugging in) or reimplements downstream (if forking); emits `(=) Implied value per share` + the verbatim no-target-price disclaimer (`inv_valuation_disclaimer`); approved assumptions carry method+source (`inv_assumptions_provenance`); keeps the **balance check = 0** every column; auto-discovered by `_select_builder` (no `BUILDERS` to edit).
 - [ ] `synth_inputs_<slug>` fixture in `tests/conftest.py` (labels ⊇ `required_labels(slug)` **and** the §7.2 labels) + a test proving no KeyError.
 - [ ] `tests/test_canonical_schema.py` + `tests/test_slug_concordance.py` pass; **`check_env` green** (recalc backend); the build runs (`build_model <input> <output> <slug>`) and the harness reports the balance check = 0 in every column. Use the Anaconda python path on this machine.
 
@@ -502,7 +502,7 @@ Result: a balancing three-statement model with a Valuation tab, honestly declare
 - Role classifier — real roles `STATEMENT / CAPITAL_STRUCTURE / REPORTED_CHECK / OPERATIONAL_RAW / CONTEXTUAL` (no `STRUCTURAL` role; a `STRUCTURAL` input item maps to `CAPITAL_STRUCTURE`): `engine/role_classifier.py:14-44`
 - Harness pipeline (builder by naming convention — `_select_builder`: `build_model_<slug>.py` if it exists, else the default engine; no sector branches): `engine/harness/pipeline.py` · input validator `detect_sector` (data-driven — delegates to `identify_sector`): `engine/harness/validator.py` · verify-only entrypoint: `python -m engine.harness <model.xlsx>` · env preflight: `python -m engine.check_env`
 - Schedules + common premises (flags read globally; stale per-sector comments): `templates/base.yaml`, read at `template_loader.py:166-167`
-- Exemplar deltas (with `signals:`): `templates/sectors/oil_and_gas.delta.yaml`, `templates/sectors/telecom.delta.yaml`
-- Separate-engine precedent (forks the pipeline; not dispatched from `main()`): `engine/build_model_telecom.py`
+- Exemplar delta (with `signals:`): `templates/sectors/oil_and_gas.delta.yaml`
+- Dedicated-engine convention: `pipeline._select_builder` auto-discovers `engine/build_model_<slug>.py` if present, else uses the default `build_model` (no dedicated separate engine ships today; O&G's bottom-up path lives inside `build_model.main`)
 - Contract guards: `tests/test_canonical_schema.py`, `tests/test_slug_concordance.py`; synth fixture `tests/conftest.py:19-21`
 - Card contract (do not duplicate): [`_schema.md`](_schema.md) · sources registry: [`_sources.md`](_sources.md)

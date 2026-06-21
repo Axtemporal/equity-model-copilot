@@ -30,9 +30,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SECTOR_DELTA_DIR = ROOT / "templates" / "sectors"
 
-# ─── slug refs (convenience only — the set of sectors is disk-driven, see known_sectors) ──────
+# ─── slug ref (convenience only — the set of sectors is disk-driven, see known_sectors) ──────
 OIL_AND_GAS = "oil_and_gas"
-TELECOM = "telecom"
 
 FINANCIALS = "Input Financials"
 OPERATIONAL = "Input Operational"
@@ -108,7 +107,7 @@ def required_labels(sector: str) -> dict[str, list[str]]:
     """{sheet: [labels]} the sector's engine hard-reads = universal base + sector delta.
 
     The universal base is shared verbatim; the delta carries sector-specific lines AND the
-    divergent-spelling ones (e.g. O&G '(+/-) Financial result' vs telecom
+    divergent-spelling ones (e.g. one sector's '(+/-) Financial result' vs another's
     '(+/-) Net financial result'). A sector with no delta yields base-only.
     """
     delta = load_delta(sector)

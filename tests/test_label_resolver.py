@@ -37,7 +37,7 @@ def test_residual_collects_only_unresolved():
     assert lr.residual(matches) == ["totally unknown line"]
 
 
-def test_telecom_alias_for_disclosed_ebitda():
-    m = _one("EBITDA", sector=cs.TELECOM)
+def test_alias_for_disclosed_ebitda():
+    m = _one("EBITDA", sector=cs.OIL_AND_GAS)
     assert m.canonical == "(=) EBITDA (as disclosed)"
     assert m.method == lr.ALIAS
