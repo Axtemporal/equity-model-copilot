@@ -12,13 +12,12 @@ the Manifest this produces. Run as: python -m engine.fase1_intake <input.xlsx>
 """
 from __future__ import annotations
 
-import re
-
 import openpyxl
 from openpyxl.utils import get_column_letter
 
 from . import canonical_schema as cs
 from . import label_resolver as lr
+from . import period_grid as pg
 from . import role_classifier as rc
 from . import sector_coverage as scov
 from .fase1_manifest import (
@@ -28,45 +27,56 @@ from .harness.invariants import FIRST_COL, HDR, LABEL_COL
 from .harness.validator import detect_sector
 from .template_loader import identify_company
 
-_QUARTER_RE = re.compile(r"^[1-4]Q\d{2}$")
-_YEAR_RE = re.compile(r"^\d{4}$")
 _SKIP_SHEETS = ("assumptions", "readme", "premises")
 
 
-def _is_period(value) -> bool:
-    text = str(value).strip() if value is not None else ""
-    return bool(_QUARTER_RE.match(text) or _YEAR_RE.match(text))
-
-
 def _find_header_row(ws) -> int:
-    """The row with the most period-like header cells (falls back to the template's row 5)."""
+    """The row with the most parseable period headers (falls back to the template's row 5)."""
     best_row, best_n = HDR, 0
     for row in range(1, min(ws.max_row, 40) + 1):
-        n = sum(1 for col in range(1, ws.max_column + 1) if _is_period(ws.cell(row, col).value))
+        n = sum(1 for col in range(1, ws.max_column + 1)
+                if pg.parse_period(ws.cell(row, col).value) is not None)
         if n > best_n:
             best_row, best_n = row, n
     return best_row
 
 
 def flatten(wb) -> list[LineRecord]:
-    """Collapse the workbook (any layout) into a flat list of labeled line records."""
+    """Collapse the workbook (any layout) into a flat list of labeled line records.
+
+    Period columns are normalized (tolerant parse) and REORDERED into the canonical interleaved
+    grid (1Q 2Q 3Q 4Q ANO …) via period_grid, so a messy layout — quarters then a blank gap then
+    annuals, PT spellings, etc. — comes out canonical regardless of how it was entered.
+    """
     records: list[LineRecord] = []
     for sheet in wb.sheetnames:
         if sheet.strip().lower().startswith(_SKIP_SHEETS):
             continue
         ws = wb[sheet]
         hdr = _find_header_row(ws)
-        period_cols = [(c, str(ws.cell(hdr, c).value).strip())
-                       for c in range(1, ws.max_column + 1) if _is_period(ws.cell(hdr, c).value)]
-        first_pc = min((c for c, _ in period_cols), default=FIRST_COL)
+        headers = [
+            (col, ws.cell(hdr, col).value,
+             any(ws.cell(r, col).value is not None for r in range(hdr + 1, ws.max_row + 1)))
+            for col in range(1, ws.max_column + 1)
+        ]
+        grid = pg.normalize_grid(headers)
+        token_to_col: dict[str, int] = {}
+        for col, token in grid.col_to_token.items():
+            token_to_col.setdefault(token, col)        # first column wins on duplicate headers
+
+        first_pc = min(grid.col_to_token, default=FIRST_COL)
         label_col = LABEL_COL if LABEL_COL < first_pc else 1
         unit_col = label_col + 1 if (label_col + 1) < first_pc else None
+
         for row in range(hdr + 1, ws.max_row + 1):
             label = ws.cell(row, label_col).value
             if not isinstance(label, str) or not label.strip():
                 continue
-            values = {pl: ws.cell(row, c).value
-                      for c, pl in period_cols if ws.cell(row, c).value is not None}
+            values = {}
+            for token in grid.order:                   # canonical interleaved order
+                value = ws.cell(row, token_to_col[token]).value
+                if value is not None:
+                    values[token] = value
             unit = ws.cell(row, unit_col).value if unit_col else None
             records.append(LineRecord(
                 raw_label=label.strip(),
