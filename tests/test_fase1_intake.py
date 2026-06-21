@@ -1,10 +1,11 @@
 """Fase 1 intake orchestrator: flatten + resolve + classify + content-sufficiency end to end."""
 import openpyxl
+import pytest
 
 from engine import canonical_schema as cs
 from engine import fase1_intake as intake
 from engine import role_classifier as rc
-from engine.fase1_manifest import MAPPED
+from engine.fase1_manifest import AI_WEB_FETCH, MAPPED, LineRecord, Manifest
 from engine.harness.invariants import find_label_row, period_columns
 
 
@@ -118,3 +119,58 @@ def test_write_adjusted_input_rolls_up_sublines(tmp_path):
     rev = find_label_row(fin, "(=) Net revenue")
     cols = {lbl: c for c, lbl in period_columns(fin)}
     assert fin.cell(rev, cols["1Q22"]).value == 105
+
+
+def test_fase1_gate_passes_on_a_sufficient_input(synth_inputs, tmp_path):
+    out = str(tmp_path / "adjusted.xlsx")
+    _path, manifest = intake.build_adjusted_input(synth_inputs, out)
+    assert manifest.content_sufficient
+    assert intake.assert_fase1_pass(out, manifest) is True
+
+
+def test_fase1_gate_blocks_on_missing_slots(tmp_path):
+    wb = _messy_input([("Receita líquida", "R$ mn", [100])], periods=("1Q22",))
+    src = str(tmp_path / "messy.xlsx")
+    wb.save(src)
+    out = str(tmp_path / "adjusted.xlsx")
+    _p, manifest = intake.build_adjusted_input(src, out)   # writes rows so the build won't KeyError
+    assert not manifest.content_sufficient                 # ...but the data isn't there
+    with pytest.raises(intake.Fase1GateError) as exc:
+        intake.assert_fase1_pass(out, manifest)
+    assert any("missing required slot" in p for p in exc.value.problems)
+
+
+def test_assess_currency_flags_stale():
+    m = Manifest(company="X", sector=cs.OIL_AND_GAS)
+    cur = intake.assess_currency(m, "3Q25", "1Q26", source_url="http://ri.example/q1")
+    assert cur["stale"] and cur["missing_periods"] == ["4Q25", "1Q26"]
+    assert m.currency["source_url"] == "http://ri.example/q1"
+
+
+def _fetched_shares(accepted, **prov):
+    return LineRecord(raw_label="Shares", sheet="Input Financials",
+                      canonical="memo: Shares outstanding (EOP)", method=AI_WEB_FETCH,
+                      role=rc.CAPITAL_STRUCTURE, disposition=MAPPED, values={"1Q22": 1000.0},
+                      user_accepted=accepted, **prov)
+
+
+def test_writer_rejects_web_fetch_without_provenance(tmp_path):
+    wb = _messy_input([("Receita líquida", "R$ mn", [100])], periods=("1Q22",))
+    src = str(tmp_path / "m.xlsx")
+    wb.save(src)
+    m = intake.analyze(src)
+    m.lines.append(_fetched_shares(accepted=False))        # fetched, not accepted, no source
+    with pytest.raises(intake.ProvenanceError):
+        intake.write_adjusted_input(m, src, str(tmp_path / "out.xlsx"))
+
+
+def test_writer_accepts_web_fetch_with_full_provenance(tmp_path):
+    wb = _messy_input([("Receita líquida", "R$ mn", [100])], periods=("1Q22",))
+    src = str(tmp_path / "m.xlsx")
+    wb.save(src)
+    m = intake.analyze(src)
+    m.lines.append(_fetched_shares(accepted=True, source_url="http://b3.example", source_date="2026-05"))
+    out = str(tmp_path / "out.xlsx")
+    intake.write_adjusted_input(m, src, out)               # no raise
+    fin = openpyxl.load_workbook(out)["Input Financials"]
+    assert find_label_row(fin, "memo: Shares outstanding (EOP)") is not None

@@ -101,3 +101,24 @@ def normalize_grid(headers) -> GridResult:
             dropped.append(raw)           # blank / separator column
     order = [tok for tok, _p in sorted(uniq.items(), key=lambda kp: kp[1].order_key)]
     return GridResult(order=order, col_to_token=col_to_token, dropped=dropped, flagged=flagged)
+
+
+def missing_quarters(input_last: str, actual_last: str) -> list[str]:
+    """Quarter tokens strictly AFTER `input_last` up to and including `actual_last`.
+
+    The deterministic half of the staleness check (Fase 1, step 1.8b): given the input's last
+    reported quarter and the company's actual last released quarter (looked up + cited by the AI),
+    enumerate the gap. Empty if the input is current (or ahead), or if either token isn't a quarter.
+    """
+    a, b = parse_period(input_last), parse_period(actual_last)
+    if not a or not b or a.is_annual or b.is_annual:
+        return []
+    out, year, quarter = [], a.year, a.quarter
+    while (year, quarter) != (b.year, b.quarter):
+        quarter += 1
+        if quarter > 4:
+            quarter, year = 1, year + 1
+        if (year, quarter) > (b.year, b.quarter):
+            break
+        out.append(f"{quarter}Q{year % 100:02d}")
+    return out

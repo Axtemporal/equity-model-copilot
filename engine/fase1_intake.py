@@ -21,7 +21,7 @@ from . import period_grid as pg
 from . import role_classifier as rc
 from . import sector_coverage as scov
 from .fase1_manifest import (
-    CONTEXTUAL, MAPPED, SLOT_ABSENT, SLOT_MAPPED, LineRecord, Manifest, SlotCoverage,
+    AI_WEB_FETCH, CONTEXTUAL, MAPPED, SLOT_ABSENT, SLOT_MAPPED, LineRecord, Manifest, SlotCoverage,
 )
 from .harness.invariants import FIRST_COL, HDR, LABEL_COL
 from .harness.validator import detect_sector
@@ -134,6 +134,23 @@ _HDR_ROW, _LABEL_COL, _UNIT_COL, _FIRST_COL = 5, 2, 3, 4
 _PLACED_ROLES = (rc.STATEMENT, rc.CAPITAL_STRUCTURE, rc.REPORTED_CHECK)
 
 
+class ProvenanceError(ValueError):
+    """An AI web-fetched value reached the writer without url + date + user acceptance."""
+
+
+def _assert_fetch_provenance(manifest: Manifest) -> None:
+    """Compliance invariant (engine-enforced, not conversation-dependent): a value tagged
+    `ai_web_fetch` may be written only with source_url + source_date + user_accepted."""
+    for rec in manifest.lines:
+        if rec.method == AI_WEB_FETCH and rec.role in _PLACED_ROLES:
+            if not (rec.source_url and rec.source_date and rec.user_accepted):
+                raise ProvenanceError(
+                    f"{rec.canonical or rec.raw_label!r}: an ai_web_fetch value needs source_url "
+                    f"+ source_date + user_accepted before it can be written (a fetched value is "
+                    f"never silently kept)"
+                )
+
+
 def _period_sort_key(token: str):
     period = pg.parse_period(token)
     return period.order_key if period else (9999, 9)
@@ -149,6 +166,7 @@ def write_adjusted_input(manifest: Manifest, source, out_path: str) -> str:
     as-is, because operational organization is deferred to Fase 2/3 (no fixed canonical schema).
     The result balances/builds only if the source operational was already canonical.
     """
+    _assert_fetch_provenance(manifest)          # compliance gate before anything is written
     src = openpyxl.load_workbook(source, data_only=True) if isinstance(source, str) else source
     sector = manifest.sector
 
@@ -216,6 +234,63 @@ def build_adjusted_input(source_path: str, out_path: str, sector: str | None = N
     return out_path, manifest
 
 
+# ─── 1.8b — staleness/currency + 1.10 — the Fase 1 gate ─────────────────────────
+
+def assess_currency(manifest: Manifest, input_last_period: str, actual_last_release: str,
+                    *, source_url: str = "", as_of: str = "") -> dict:
+    """Record the staleness assessment on the manifest.
+
+    The AI supplies the company's actual last release (looked up + cited — a public fact);
+    Python computes the missing quarters. Stored in `manifest.currency` so the gate reads it
+    from the artifact, not the conversation.
+    """
+    missing = pg.missing_quarters(input_last_period, actual_last_release)
+    manifest.currency = {
+        "input_last_period": input_last_period,
+        "actual_last_release": actual_last_release,
+        "source_url": source_url,
+        "as_of": as_of,
+        "missing_periods": missing,
+        "stale": bool(missing),
+    }
+    return manifest.currency
+
+
+class Fase1GateError(Exception):
+    """Raised by assert_fase1_pass with the full blocking list when Fase 1 is not complete."""
+
+    def __init__(self, problems):
+        self.problems = list(problems)
+        super().__init__("; ".join(self.problems))
+
+
+def assert_fase1_pass(adjusted_input_path: str, manifest: Manifest, *,
+                      require_currency: bool = False) -> bool:
+    """The Fase 1 gate (step 1.10) — an engine invariant, read from artifacts not conversation.
+
+    PASS iff: (a) the written canonical input re-validates (so the engine won't KeyError),
+    (b) content sufficiency holds (every required slot mapped or declared), and (c) — when
+    `require_currency` — the input is not stale. Raises Fase1GateError listing every problem.
+    """
+    from .harness.validator import validate_input
+
+    problems: list[str] = []
+    report = validate_input(adjusted_input_path)
+    if not report.ok:
+        problems += [f"validator: {r.message}" for r in report.failures()]
+    if not manifest.content_sufficient:
+        problems += [f"missing required slot: [{c.sheet}] {c.slot}" for c in manifest.missing_required]
+    if require_currency:
+        currency = manifest.currency or {}
+        if not currency:
+            problems.append("currency not assessed (run assess_currency)")
+        elif currency.get("missing_periods"):
+            problems.append(f"input is stale — missing {currency['missing_periods']}")
+    if problems:
+        raise Fase1GateError(problems)
+    return True
+
+
 def _report(manifest: Manifest) -> str:
     mapped = sum(1 for line in manifest.lines if line.disposition == MAPPED)
     out = [
@@ -227,10 +302,21 @@ def _report(manifest: Manifest) -> str:
         out.append("  MISSING required slots:")
         for cov in manifest.missing_required:
             out.append(f"    - [{cov.sheet}] {cov.slot}")
-    if manifest.residual:
-        out.append("  residual (for the AI semantic pass / your review):")
-        for raw in manifest.residual[:20]:
-            out.append(f"    - {raw}")
+    rollups = manifest.rollups()
+    if rollups:
+        out.append("  rollups (sub-lines summed into one canonical — confirm the sum):")
+        for canonical, recs in rollups.items():
+            out.append(f"    - {canonical} <- {', '.join(r.raw_label for r in recs)}")
+    material = manifest.material_residue()
+    if material:
+        out.append("  material residue (carries data — decide: map / declare-zero / discard):")
+        for rec in material[:20]:
+            out.append(f"    - {rec.raw_label}")
+    if manifest.currency:
+        cur = manifest.currency
+        verdict = f"STALE, missing {cur['missing_periods']}" if cur.get("stale") else "current"
+        out.append(f"  currency: {verdict} (input last {cur.get('input_last_period')}, "
+                   f"released {cur.get('actual_last_release')})")
     return "\n".join(out)
 
 

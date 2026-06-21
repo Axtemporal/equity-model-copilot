@@ -46,6 +46,13 @@ def test_unparseable_header_with_data_is_flagged_not_dropped():
     assert g.order == ["1Q23", "2023"]
 
 
+def test_missing_quarters_enumerates_the_gap():
+    assert pg.missing_quarters("3Q25", "1Q26") == ["4Q25", "1Q26"]
+    assert pg.missing_quarters("4Q25", "4Q25") == []     # current
+    assert pg.missing_quarters("1Q26", "3Q25") == []     # input is ahead
+    assert pg.missing_quarters("2024", "1Q26") == []     # annual token -> not a quarter gap
+
+
 def test_flatten_reorders_a_messy_workbook():
     wb = openpyxl.Workbook()
     ws = wb.active

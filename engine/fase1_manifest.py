@@ -25,6 +25,9 @@ SLOT_DECLARED_ZERO = "declared_zero"
 SLOT_ABSENT = "absent"
 
 
+AI_WEB_FETCH = "ai_web_fetch"   # method tag for an opt-in web-fetched scalar (provenance enforced)
+
+
 @dataclass
 class LineRecord:
     raw_label: str
@@ -33,11 +36,15 @@ class LineRecord:
     unit: str | None = None
     values: dict = field(default_factory=dict)      # period -> value
     canonical: str | None = None
-    method: str = "unresolved"                       # exact|alias|fuzzy|ai|unresolved
+    method: str = "unresolved"                       # exact|alias|fuzzy|ai|ai_web_fetch|unresolved
     confidence: float = 0.0
     role: str | None = None
     disposition: str = PENDING
     provenance: str = ""
+    # provenance for an AI web-fetched value (enforced by the writer; never silently kept)
+    source_url: str = ""
+    source_date: str = ""
+    user_accepted: bool = False
 
 
 @dataclass
@@ -63,6 +70,23 @@ class Manifest:
     @property
     def content_sufficient(self) -> bool:
         return not self.missing_required
+
+    def rollups(self) -> dict:
+        """{canonical: [LineRecord]} where >1 record mapped to the same canonical (summed at
+        write). Surfaced so the user/AI confirms the sum (and catches an aggregate-plus-its-
+        components double-count) — the checksum-vs-reported-subtotal safeguard."""
+        groups: dict[str, list] = {}
+        for record in self.lines:
+            if record.canonical and record.disposition == MAPPED:
+                groups.setdefault(record.canonical, []).append(record)
+        return {canonical: recs for canonical, recs in groups.items() if len(recs) > 1}
+
+    def material_residue(self) -> list:
+        """Residual lines that carry numeric data — candidates for user disposition (vs noise
+        like section headers / subtotal labels that carry no values)."""
+        residual = set(self.residual)
+        return [r for r in self.lines if r.raw_label in residual
+                and any(isinstance(v, (int, float)) for v in r.values.values())]
 
     def to_dict(self) -> dict:
         return {
