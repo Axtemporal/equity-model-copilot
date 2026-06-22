@@ -615,12 +615,12 @@ def main(input_path, out_path, sector: str | None = None):
         ]
 
     # working-capital days, back-solved from the last historical balances
-    arl = g(fin, frow["Trade receivables"], lc_f)
-    invl = g(fin, frow["Inventories"], lc_f)
-    apl = g(fin, frow["Trade payables"], lc_f)
-    ocal = g(fin, frow["Other current assets"], lc_f)
-    ocll = g(fin, frow["Other current liabilities"], lc_f)
-    cogs_base = -g(fin, frow["(-) Cost of goods sold"], lc_f)
+    arl = gf("Trade receivables")
+    invl = gf("Inventories")
+    apl = gf("Trade payables")
+    ocal = gf("Other current assets")
+    ocll = gf("Other current liabilities")
+    cogs_base = -gf("(-) Cost of goods sold")
     dseed = lambda bal, base: round(bal / base * 91.25, 1) if base else 30.0
     seeds += [
         ("dso", "Days sales outstanding (DSO)", "days", NUM_1D, dseed(arl, rev_l), 1),
@@ -631,10 +631,10 @@ def main(input_path, out_path, sector: str | None = None):
     ]
 
     # debt schedule seeds (interest on opening balance; flat debt by default)
-    loans_c = g(fin, frow["Loans and financing (current)"], lc_f)
-    loans_nc = g(fin, frow["Loans and financing (non-current)"], lc_f)
+    loans_c = gf("Loans and financing (current)")
+    loans_nc = gf("Loans and financing (non-current)")
     debt_total = loans_c + loans_nc
-    finres_q = g(fin, frow["(+/-) Financial result"], lc_f)
+    finres_q = gf("(+/-) Financial result")
     debt_rate_seed = round(max(0.0, -finres_q / debt_total), 6) if debt_total else 0.0
     other_finres_seed = round(finres_q + debt_rate_seed * debt_total, 6)
     curr_pct_seed = round(loans_c / debt_total, 4) if debt_total else 0.2
@@ -648,8 +648,8 @@ def main(input_path, out_path, sector: str | None = None):
     ]
 
     # lease (IFRS-16) seeds — neutral by default; activated in the assumption session
-    lease_c = g(fin, frow["Lease liabilities (current)"], lc_f)
-    lease_nc = g(fin, frow["Lease liabilities (non-current)"], lc_f)
+    lease_c = gf("Lease liabilities (current)")
+    lease_nc = gf("Lease liabilities (non-current)")
     lease_total = lease_c + lease_nc
     lease_curr_seed = round(lease_c / lease_total, 4) if lease_total else 0.2
     seeds += [
@@ -776,8 +776,10 @@ def main(input_path, out_path, sector: str | None = None):
                      qp=cogs_g, yb="sum", ys=cogs_g)
         row_depl = r
         depl_g = lambda p, i: f"=-{Praw('depr', p)}"
+        _da_lbl = "memo: (+) Depreciation, depletion & amortization"
         r = add_line(om, r, "(-) Depreciation & amortization", "USD mn", NUM_MN, tl,
-                     hist=lambda p: f"=-'Input Financials'!{L(fhdr[p['label']])}{frow['memo: (+) Depreciation, depletion & amortization']}",
+                     hist=(lambda p: f"=-'Input Financials'!{L(fhdr[p['label']])}{frow[_da_lbl]}")
+                          if _da_lbl in frow else None,
                      qp=depl_g, yb="sum", ys=depl_g)
         row_capext = r
         # Capex = maintenance (≈ D&A) + growth (Δrevenue ÷ sales-to-capital). PP&E (and so
@@ -857,7 +859,9 @@ def main(input_path, out_path, sector: str | None = None):
     r += 1
 
     # ARO / decommissioning roll-forward (accretion is a premise; non-cash, added back in CFO)
-    seed_aro = lambda p: f"='Input Financials'!{L(fhdr[last])}{frow['Provisions (incl. asset retirement obligation)']}"
+    _aro_lbl = "Provisions (incl. asset retirement obligation)"
+    seed_aro = lambda p: (f"='Input Financials'!{L(fhdr[last])}{frow[_aro_lbl]}"
+                          if _aro_lbl in frow else "=0")
     r, rows_sc["aro"] = corkscrew(
         r, "ASSET RETIREMENT OBLIGATION (decommissioning)", seed_aro,
         plus=lambda p, i: P("aro_accr", p),
@@ -875,7 +879,11 @@ def main(input_path, out_path, sector: str | None = None):
         nonlocal ri
         rows_is[label] = ri
         ri = add_line(is_, ri, label, unit, fmt, tl, **kw)
-    hist_fin = lambda lbl: (lambda p: f"='Input Financials'!{L(fhdr[p['label']])}{frow[lbl]}")
+    # None-safe: a line the engine builds for every sector but that a non-O&G input doesn't
+    # carry (e.g. Exploration expenses) links to nothing instead of KeyError-ing. The per-sector
+    # validator (delta) is the loud guard for labels a sector DECLARES it needs.
+    hist_fin = lambda lbl: (lambda p: (f"='Input Financials'!{L(fhdr[p['label']])}{frow[lbl]}"
+                                       if lbl in frow else None))
     is_line("(=) Net revenue", "USD mn", NUM_MN, hist=hist_fin("(=) Net revenue"),
             qp=lambda p, i: f"='{OM}'!{L(p['col'])}{row_rev}", yb="sum",
             ys=lambda p, i: f"='{OM}'!{L(p['col'])}{row_rev}")
